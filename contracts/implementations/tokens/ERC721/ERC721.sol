@@ -3,11 +3,11 @@ pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 import "./extensions/ERC721Base.sol";
-import "../../../extensions/UUPSBase.sol";
+import "../../../extensions/UUPSOwnable.sol";
 
-contract ERC721 is UUPSBase, ERC721Base, ERC721Upgradeable {
+contract ERC721 is UUPSOwnable, ERC721Base, ERC721Upgradeable {
     function ERC721_init(string memory name_, string memory symbol_) public initializer {
-        __UUPSBase_init();
+        __UUPSOwnable_init();
         __ERC721_init(name_, symbol_);
     }
 

@@ -3,9 +3,9 @@ pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "./extensions/ERC20Base.sol";
-import "../../../extensions/UUPSBase.sol";
+import "../../../extensions/UUPSOwnable.sol";
 
-contract ERC20 is UUPSBase, ERC20Base, ERC20Upgradeable {
+contract ERC20 is UUPSOwnable, ERC20Base, ERC20Upgradeable {
     function ERC20_init(
         string memory name_,
         string memory symbol_,
@@ -13,7 +13,7 @@ contract ERC20 is UUPSBase, ERC20Base, ERC20Upgradeable {
         address mintRecivier_,
         uint8 decimals_
     ) public initializer {
-        __UUPSBase_init();
+        __UUPSOwnable_init();
         __ERC20_init(name_, symbol_);
 
         _decimals = decimals_;

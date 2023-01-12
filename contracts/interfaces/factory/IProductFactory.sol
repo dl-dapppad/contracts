@@ -11,7 +11,10 @@ interface IProductFactory {
         uint256 cashback
     );
 
-    function ProductFactory_init() external;
+    /**
+     * @param accessControl_ AccessControl contract address
+     */
+    function ProductFactory_init(address accessControl_) external;
 
     /**
      * @param alias_ Product alias
@@ -21,7 +24,9 @@ interface IProductFactory {
     function deploy(
         bytes32 alias_,
         address paymentToken_,
-        bytes memory initializeData_
+        bytes calldata initializeData_,
+        bytes32[] calldata discountAliases_,
+        uint256[] calldata discounts_
     ) external returns (address);
 
     /**

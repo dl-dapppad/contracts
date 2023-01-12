@@ -4,16 +4,16 @@ pragma solidity ^0.8.9;
 import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721BurnableUpgradeable.sol";
 import "./extensions/ERC721Base.sol";
-import "../../../extensions/UUPSBase.sol";
+import "../../../extensions/UUPSOwnable.sol";
 
 contract ERC721BurnEnum is
-    UUPSBase,
+    UUPSOwnable,
     ERC721Base,
     ERC721EnumerableUpgradeable,
     ERC721BurnableUpgradeable
 {
     function ERC721BurnEnum_init(string memory name_, string memory symbol_) public initializer {
-        __UUPSBase_init();
+        __UUPSOwnable_init();
         __ERC721_init(name_, symbol_);
         __ERC721Burnable_init();
     }

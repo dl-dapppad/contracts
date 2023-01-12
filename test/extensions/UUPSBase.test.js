@@ -1,14 +1,14 @@
 // const { expect } = require('chai');
-// const { UUPSBaseDeployer } = require('../../helpers/deployers');
+// const { UUPSOwnableDeployer } = require('../../helpers/deployers');
 
-// describe('UUPSBase', async () => {
+// describe('UUPSOwnable', async () => {
 //   let uupsBase;
 //   let owner, ivan;
 
 //   beforeEach('setup', async () => {
 //     [owner, ivan, treasury] = await ethers.getSigners();
 
-//     uupsBase = await new UUPSBaseDeployer().deployProxy();
+//     uupsBase = await new UUPSOwnableDeployer().deployProxy();
 //   });
 
 //   describe('removeUpgradeability()', async () => {
@@ -28,4 +28,4 @@
 //   // });
 // });
 
-// // npx hardhat coverage --testfiles "test/extensions/UUPSBase.test.js"
+// // npx hardhat coverage --testfiles "test/extensions/UUPSOwnable.test.js"

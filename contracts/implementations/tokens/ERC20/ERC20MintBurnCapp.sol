@@ -4,10 +4,10 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20CappedUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 import "./extensions/ERC20Base.sol";
-import "../../../extensions/UUPSBase.sol";
+import "../../../extensions/UUPSOwnable.sol";
 
 contract ERC20MintBurnCapp is
-    UUPSBase,
+    UUPSOwnable,
     ERC20Base,
     ERC20BurnableUpgradeable,
     ERC20CappedUpgradeable
@@ -20,7 +20,7 @@ contract ERC20MintBurnCapp is
         uint8 decimals_,
         uint256 cap_
     ) external initializer {
-        __UUPSBase_init();
+        __UUPSOwnable_init();
         __ERC20_init(name_, symbol_);
         __ERC20Burnable_init();
         __ERC20Capped_init(cap_);

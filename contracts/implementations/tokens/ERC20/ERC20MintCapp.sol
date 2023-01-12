@@ -3,9 +3,9 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20CappedUpgradeable.sol";
 import "./extensions/ERC20Base.sol";
-import "../../../extensions/UUPSBase.sol";
+import "../../../extensions/UUPSOwnable.sol";
 
-contract ERC20MintCapp is UUPSBase, ERC20Base, ERC20CappedUpgradeable {
+contract ERC20MintCapp is UUPSOwnable, ERC20Base, ERC20CappedUpgradeable {
     function ERC20MintCapp_init(
         string memory name_,
         string memory symbol_,
@@ -14,7 +14,7 @@ contract ERC20MintCapp is UUPSBase, ERC20Base, ERC20CappedUpgradeable {
         uint8 decimals_,
         uint256 cap_
     ) external initializer {
-        __UUPSBase_init();
+        __UUPSOwnable_init();
         __ERC20_init(name_, symbol_);
         __ERC20Capped_init(cap_);
 

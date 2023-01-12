@@ -3,22 +3,24 @@ pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-import "../../interfaces/factory/IProductFactory.sol";
-import "../../interfaces/utils/IOwnable.sol";
-import "../../interfaces/IPayment.sol";
+import "../interfaces/factory/IProductFactory.sol";
+import "../interfaces/utils/IOwnable.sol";
+import "../interfaces/IPayment.sol";
 
-import "../../proxy/Proxy.sol";
+import "../BaseProxy.sol";
 import "./ProductFactoryConfig.sol";
 
 contract ProductFactory is ProductFactoryConfig, IProductFactory {
-    function ProductFactory_init() public initializer {
-        __ProductFactoryConfig_init();
+    function ProductFactory_init(address accessControl_) public initializer {
+        __ProductFactoryConfig_init(accessControl_);
     }
 
     function deploy(
         bytes32 alias_,
         address paymentToken_,
-        bytes memory initializeData_
+        bytes calldata initializeData_,
+        bytes32[] calldata discountAliases_,
+        uint256[] calldata discounts_
     ) external returns (address) {
         Product storage product = _getProduct(alias_);
 
@@ -27,7 +29,15 @@ contract ProductFactory is ProductFactoryConfig, IProductFactory {
         uint256 currentPrice_ = product.currentPrice;
         uint256 cashbackAmount_ = _getCashback(currentPrice_, product.cashbackPercent);
 
-        IPayment(payment).pay(paymentToken_, msg.sender, currentPrice_, cashbackAmount_);
+        IPayment(payment).pay(
+            alias_,
+            paymentToken_,
+            msg.sender,
+            currentPrice_,
+            cashbackAmount_,
+            discountAliases_,
+            discounts_
+        );
 
         address proxy_ = _create2(
             _getBytecode(initializeData_, product.implementation),
@@ -74,7 +84,7 @@ contract ProductFactory is ProductFactoryConfig, IProductFactory {
         pure
         returns (bytes memory)
     {
-        bytes memory bytecode_ = type(Proxy).creationCode;
+        bytes memory bytecode_ = type(BaseProxy).creationCode;
 
         return abi.encodePacked(bytecode_, abi.encode(initializeData_, implementation_));
     }

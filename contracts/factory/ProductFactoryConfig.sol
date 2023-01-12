@@ -5,21 +5,23 @@ import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@dlsl/dev-modules/utils/Globals.sol";
 
-import "../../interfaces/factory/IProductFactoryConfig.sol";
+import "../interfaces/factory/IProductFactoryConfig.sol";
 
-import "../../extensions/UUPSBase.sol";
+import "../extensions/UUPSAccessControl.sol";
 
-abstract contract ProductFactoryConfig is UUPSBase, IProductFactoryConfig {
+abstract contract ProductFactoryConfig is UUPSAccessControl, IProductFactoryConfig {
     using EnumerableSet for EnumerableSet.Bytes32Set;
     using Math for uint256;
+
+    bytes32 public constant PRODUCT_FACTORY_ROLE = keccak256("PRODUCT_FACTORY_ROLE");
 
     address public payment;
 
     mapping(bytes32 => Product) public products;
     EnumerableSet.Bytes32Set aliases;
 
-    function __ProductFactoryConfig_init() public onlyInitializing {
-        __UUPSBase_init();
+    function __ProductFactoryConfig_init(address accessControl_) public onlyInitializing {
+        __UUPSAccessControl_init(accessControl_);
     }
 
     function setupProduct(
@@ -38,19 +40,22 @@ abstract contract ProductFactoryConfig is UUPSBase, IProductFactoryConfig {
         setStatus(alias_, isActive_);
     }
 
-    function setPayment(address payment_) external onlyOwner {
+    function setPayment(address payment_) external hasRole(PRODUCT_FACTORY_ROLE) {
         payment = payment_;
 
         emit PaymentChanged(payment_);
     }
 
-    function addProduct(bytes32 alias_) public onlyOwner {
+    function addProduct(bytes32 alias_) public hasRole(PRODUCT_FACTORY_ROLE) {
         aliases.add(alias_);
 
         emit ProductAdded(alias_);
     }
 
-    function setImplementation(bytes32 alias_, address implementation_) public onlyOwner {
+    function setImplementation(bytes32 alias_, address implementation_)
+        public
+        hasRole(PRODUCT_FACTORY_ROLE)
+    {
         require(aliases.contains(alias_), "PFC: not found");
 
         products[alias_].implementation = implementation_;
@@ -62,7 +67,7 @@ abstract contract ProductFactoryConfig is UUPSBase, IProductFactoryConfig {
         bytes32 alias_,
         uint256 currentPrice_,
         uint256 minPrice_
-    ) public onlyOwner {
+    ) public hasRole(PRODUCT_FACTORY_ROLE) {
         require(currentPrice_ >= minPrice_, "PFC: invalid prices");
 
         Product storage product = _getProduct(alias_);
@@ -77,7 +82,7 @@ abstract contract ProductFactoryConfig is UUPSBase, IProductFactoryConfig {
         bytes32 alias_,
         uint128 decreasePercent_,
         uint128 cashbackPercent_
-    ) public onlyOwner {
+    ) public hasRole(PRODUCT_FACTORY_ROLE) {
         Product storage product = _getProduct(alias_);
 
         require(decreasePercent_ <= PERCENTAGE_100, "PFC: invalid decrease percent");
@@ -89,7 +94,7 @@ abstract contract ProductFactoryConfig is UUPSBase, IProductFactoryConfig {
         emit PercentsChanged(alias_, decreasePercent_, cashbackPercent_);
     }
 
-    function setStatus(bytes32 alias_, bool isActive_) public onlyOwner {
+    function setStatus(bytes32 alias_, bool isActive_) public hasRole(PRODUCT_FACTORY_ROLE) {
         products[alias_].isActive = isActive_;
 
         emit StatusChanged(alias_, isActive_);

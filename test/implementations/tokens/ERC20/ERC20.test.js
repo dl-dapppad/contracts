@@ -47,7 +47,7 @@ describe('ERC20', async () => {
       await erc20.proxy.removeUpgradeability();
 
       await expect(erc20.proxy.upgradeTo(newErc20.implementation.address)).to.be.revertedWith(
-        "UUPSBase: upgrade isn't available"
+        "UUPSOwnable: upgrade isn't available"
       );
     });
   });

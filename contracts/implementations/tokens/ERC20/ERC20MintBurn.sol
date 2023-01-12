@@ -3,9 +3,9 @@ pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 import "./extensions/ERC20Base.sol";
-import "../../../extensions/UUPSBase.sol";
+import "../../../extensions/UUPSOwnable.sol";
 
-contract ERC20MintBurn is UUPSBase, ERC20Base, ERC20BurnableUpgradeable {
+contract ERC20MintBurn is UUPSOwnable, ERC20Base, ERC20BurnableUpgradeable {
     function ERC20MintBurn_init(
         string memory name_,
         string memory symbol_,
@@ -13,7 +13,7 @@ contract ERC20MintBurn is UUPSBase, ERC20Base, ERC20BurnableUpgradeable {
         address mintRecivier_,
         uint8 decimals_
     ) public initializer {
-        __UUPSBase_init();
+        __UUPSOwnable_init();
         __ERC20_init(name_, symbol_);
         __ERC20Burnable_init();
 

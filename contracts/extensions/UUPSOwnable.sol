@@ -4,10 +4,10 @@ pragma solidity ^0.8.9;
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-abstract contract UUPSBase is OwnableUpgradeable, UUPSUpgradeable {
+abstract contract UUPSOwnable is OwnableUpgradeable, UUPSUpgradeable {
     bool public isNotUpgradeable;
 
-    function __UUPSBase_init() internal onlyInitializing {
+    function __UUPSOwnable_init() internal onlyInitializing {
         __ERC1967Upgrade_init();
         __UUPSUpgradeable_init();
         __Ownable_init();
@@ -18,6 +18,6 @@ abstract contract UUPSBase is OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _authorizeUpgrade(address) internal view override onlyOwner {
-        require(!isNotUpgradeable, "UUPSBase: upgrade isn't available");
+        require(!isNotUpgradeable, "UUPSOwnable: upgrade isn't available");
     }
 }
