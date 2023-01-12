@@ -1,0 +1,13 @@
+node_modules
+.env
+
+# Hardhat files
+cache
+artifacts
+coverage.json
+coverage
+
+# IDE files
+.idea
+
+contracts_old
