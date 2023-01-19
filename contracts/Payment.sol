@@ -11,6 +11,7 @@ import "@dlsl/dev-modules/libs/decimals/DecimalsConverter.sol";
 import "./extensions/UUPSAccessControl.sol";
 
 import "./interfaces/IUniswapPriceOracleV8.sol";
+import "./interfaces/utils/IWETH9.sol";
 import "./interfaces/IPayment.sol";
 import "./interfaces/ICashback.sol";
 
@@ -36,6 +37,10 @@ contract Payment is ERC165Upgradeable, UUPSAccessControl, IPayment {
     address public uniPriceOracle;
 
     // End
+
+    receive() external payable {
+        require(paymentTokens.contains(msg.sender), "Payment: native transfer forbidden");
+    }
 
     function Payment_init(address accessControl_) public initializer {
         __UUPSAccessControl_init(accessControl_);
@@ -116,64 +121,46 @@ contract Payment is ERC165Upgradeable, UUPSAccessControl, IPayment {
         bytes32[] calldata discountProducts_,
         uint256[] calldata discounts_
     ) external hasRole(FACTORY_CONTRACT_ROLE) {
-        require(treasury != address(0), "Payment: treasury isn't set");
-        require(paymentTokens.contains(paymentToken_), "Payment: invalid token");
+        _pay(
+            product_,
+            paymentToken_,
+            payer_,
+            price_,
+            cashback_,
+            discountProducts_,
+            discounts_,
+            false
+        );
+    }
 
-        uint8 paymentDecimals_ = IERC20Metadata(paymentToken_).decimals();
+    function payNative(
+        bytes32 product_,
+        address paymentToken_,
+        address payer_,
+        uint256 price_,
+        uint256 cashback_,
+        bytes32[] calldata discountProducts_,
+        uint256[] calldata discounts_
+    ) external payable hasRole(FACTORY_CONTRACT_ROLE) {
+        IWETH9(paymentToken_).deposit{value: msg.value}();
 
-        // Recalculate `price_` and `cashback_` including `paymentToken_` token decimals
-        price_ = price_.from18(paymentDecimals_);
-        cashback_ = cashback_.from18(paymentDecimals_);
-        // End
+        _pay(
+            product_,
+            paymentToken_,
+            payer_,
+            price_,
+            cashback_,
+            discountProducts_,
+            discounts_,
+            true
+        );
 
-        if (price_ == 0) return;
-        require(price_ >= cashback_, "Payment: invalid amounts");
+        uint256 balance_ = IWETH9(paymentToken_).balanceOf(address(this));
+        if (balance_ > 0) {
+            IWETH9(paymentToken_).withdraw(balance_);
 
-        //// Recalculate `price_` and `cashback_` including `_discountAmount`
-        // Calculate real available discount, based on the `products_` and `amounts_`
-        // Discount returns in `pointToken`
-        uint256 discountInPointToken_;
-        if (discountProducts_.length > 0) {
-            discountInPointToken_ = ICashback(cashback).useCashback(
-                discountProducts_,
-                discounts_,
-                payer_
-            );
-        }
-        // End
-
-        if (discountInPointToken_ > 0) {
-            uint256 discountInPaymentToken_ = discountInPointToken_;
-            // If needed, recalculate discount `pointToken_` to `paymentToken_`
-            if (pointToken != paymentToken_) {
-                discountInPaymentToken_ = getSwapAmount(
-                    pointToken,
-                    paymentToken_,
-                    discountInPointToken_
-                );
-            }
-            // End
-
-            // In case of full discount, `payer_` can lose some cashback
-            if (discountInPaymentToken_ >= price_) {
-                price_ = 0;
-                cashback_ = 0;
-            } else {
-                uint256 paymentAmountWithDiscount_ = price_ - discountInPaymentToken_;
-
-                cashback_ = (cashback_ * paymentAmountWithDiscount_) / price_; // Proportional reduction of the cashback, by the amount of the discount
-                price_ = paymentAmountWithDiscount_;
-            }
-        }
-        //// End
-
-        if (price_ == 0) return;
-
-        IERC20(paymentToken_).safeTransferFrom(payer_, treasury, price_);
-
-        if (cashback_ != 0) {
-            uint256 cashbackInPointToken_ = getSwapAmount(paymentToken_, pointToken, cashback_);
-            ICashback(cashback).mintPoints(product_, cashbackInPointToken_, payer_);
+            (bool status_, ) = payer_.call{value: balance_}("");
+            require(status_, "Payment: failed to send");
         }
     }
 
@@ -204,5 +191,96 @@ contract Payment is ERC165Upgradeable, UUPSAccessControl, IPayment {
                 swapInfo_.poolFee,
                 swapInfo_.secondsAgo
             );
+    }
+
+    /**
+     * @dev Recalculate `price_` and `cashback_` including `discount_`
+     */
+    function getPriceWithDiscount(
+        address paymentToken_,
+        uint256 price_,
+        uint256 cashback_,
+        uint256 discount_
+    ) public view returns (uint256, uint256) {
+        address pointToken_ = pointToken;
+
+        // Recalculate `price_` and `cashback_` including `paymentToken_` token decimals
+        uint256 priceInPointToken_ = price_.from18(IERC20Metadata(pointToken_).decimals());
+        uint256 cashbackInPointToken_ = cashback_.from18(IERC20Metadata(pointToken_).decimals());
+        uint256 discountInPointToken_ = discount_.from18(IERC20Metadata(pointToken_).decimals());
+        // End
+
+        if (priceInPointToken_ == 0) {
+            return (0, 0);
+        }
+
+        if (discountInPointToken_ != 0) {
+            // Recalculate `priceInPointToken_` and `cashbackInPointToken_` including `discountInPointToken_`
+            // In case of full discount, `payer_` can lose some cashback
+            if (discountInPointToken_ >= priceInPointToken_) {
+                return (0, 0);
+            } else {
+                uint256 paymentAmountWithDiscount_ = priceInPointToken_ - discountInPointToken_;
+
+                cashbackInPointToken_ =
+                    (cashbackInPointToken_ * paymentAmountWithDiscount_) /
+                    priceInPointToken_; // Proportional reduction of the cashback, by the amount of the discount
+                priceInPointToken_ = paymentAmountWithDiscount_;
+            }
+            // End
+        }
+
+        uint256 priceInPaymentToken_;
+        uint256 cashbackInPaymentToken_;
+        if (pointToken_ == paymentToken_) {
+            priceInPaymentToken_ = priceInPointToken_;
+            cashbackInPaymentToken_ = cashbackInPointToken_;
+        } else {
+            priceInPaymentToken_ = getSwapAmount(paymentToken_, pointToken_, priceInPointToken_);
+        }
+
+        uint256 cashbackInBaseDecimals_ = cashbackInPointToken_.to18(
+            IERC20Metadata(pointToken_).decimals()
+        );
+
+        return (priceInPaymentToken_, cashbackInBaseDecimals_);
+    }
+
+    function _pay(
+        bytes32 product_,
+        address paymentToken_,
+        address payer_,
+        uint256 price_,
+        uint256 cashback_,
+        bytes32[] memory discountProducts_,
+        uint256[] memory discounts_,
+        bool isNative_
+    ) private {
+        require(treasury != address(0), "Payment: treasury isn't set");
+        require(paymentTokens.contains(paymentToken_), "Payment: invalid token");
+        require(price_ >= cashback_, "Payment: invalid amounts");
+
+        uint256 discount_;
+        if (discountProducts_.length > 0) {
+            discount_ = ICashback(cashback).useCashback(discountProducts_, discounts_, payer_);
+        }
+
+        (uint256 priceInPaymentToken_, uint256 cashbackInBaseDecimals_) = getPriceWithDiscount(
+            paymentToken_,
+            price_,
+            cashback_,
+            discount_
+        );
+
+        if (priceInPaymentToken_ != 0) {
+            address sender_ = isNative_ ? address(this) : payer_;
+            IERC20(paymentToken_).safeTransferFrom(sender_, treasury, priceInPaymentToken_);
+        }
+
+        if (cashbackInBaseDecimals_ != 0) {
+            ICashback(cashback).mintPoints(product_, cashbackInBaseDecimals_, payer_);
+        }
+
+        emit Payed(payer_, paymentToken_, priceInPaymentToken_, cashbackInBaseDecimals_);
     }
 }

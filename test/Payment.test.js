@@ -1,151 +1,107 @@
 const { expect } = require('chai');
-const { toWei, zeroAddress, maxUint256, toBN } = require('../helpers/bn');
-const { FarmingDeployer, ERC20Deployer, PaymentDeployer, UniswapPriceOracleDeployer } = require('../helpers/deployers');
+const { toWei, zeroAddress, toBN } = require('../helpers/bn');
+const { AccessControlDeployer, ERC20Deployer, PaymentDeployer, CashbackDeployer } = require('../helpers/deployers');
 
 describe('Payment', async () => {
-  let payment, usdt, dai, farming, dapp, upo;
-  let owner, ivan, treasury, factory, router, router2;
+  let payment, cashback, dai, upo;
+  let owner, ivan, treasury, factory;
 
   beforeEach('setup', async () => {
-    [owner, ivan, treasury, factory, router, router2] = await ethers.getSigners();
+    [owner, ivan, treasury, factory] = await ethers.getSigners();
 
-    payment = await new PaymentDeployer().deployProxy();
-    usdt = await new ERC20Deployer().deployProxy([
-      'Tether USD',
-      'USDT',
-      toWei('10000', 6).toString(),
-      owner.address,
-      '6',
-    ]);
-    dai = await new ERC20Deployer().deployProxy([
-      'Dai Stablecoin',
-      'DAI',
-      toWei('10000').toString(),
-      owner.address,
-      '18',
-    ]);
+    pointToken = await new ERC20Deployer().deployProxy(['PT', 'PT', toWei('1000', 6).toString(), owner.address, '6']);
+    usdc = await new ERC20Deployer().deployProxy(['USD Coin', 'USDC', toWei('1000').toString(), owner.address, '6']);
+    dai = await new ERC20Deployer().deployProxy(['DAI', 'DAI', toWei('1000').toString(), owner.address, '18']);
 
-    const Token = await ethers.getContractFactory('Token');
-    dapp = await Token.deploy('N', 'S');
+    accessControl = await new AccessControlDeployer().deploy();
+    payment = await new PaymentDeployer().deployProxy([accessControl.implementation.address]);
+    cashback = await new CashbackDeployer().deployProxy([accessControl.implementation.address]);
 
-    const minterRole = await dapp.MINTER_ROLE();
-    await dapp.grantRole(minterRole, payment.proxy.address);
-    await dapp.grantRole(minterRole, owner.address);
-    await dapp.mint(owner.address, toWei('1').toString());
-    await dapp.revokeRole(minterRole, owner.address);
+    // Setup roles
+    const PAYMENT_CONTRACT_ROLE = await cashback.proxy.PAYMENT_CONTRACT_ROLE();
+    const PAYMENT_ROLE = await payment.proxy.PAYMENT_ROLE();
+    const FACTORY_CONTRACT_ROLE = await payment.proxy.FACTORY_CONTRACT_ROLE();
+    await accessControl.implementation.grantRole(PAYMENT_CONTRACT_ROLE, payment.proxy.address);
+    await accessControl.implementation.grantRole(PAYMENT_ROLE, owner.address);
+    await accessControl.implementation.grantRole(FACTORY_CONTRACT_ROLE, factory.address);
+    // End
 
-    farming = await new FarmingDeployer().deployProxy();
-    await farming.proxy.setTokens(dapp.address, usdt.proxy.address);
-
-    upo = await new UniswapPriceOracleDeployer().deploy();
+    const UniswapPriceOracleMock = await ethers.getContractFactory('UniswapPriceOracleMock');
+    upo = await UniswapPriceOracleMock.deploy();
   });
 
   describe('Payment_init()', async () => {
     it('should initialize', async () => {
-      const adminRole = await payment.proxy.DEFAULT_ADMIN_ROLE();
-
-      expect(await payment.proxy.hasRole(adminRole, owner.address)).to.be.equal(true);
+      expect(await payment.proxy.accessControl()).to.be.equal(accessControl.implementation.address);
     });
     it('should revert on second initialize', async () => {
-      await expect(payment.proxy.Payment_init()).to.be.revertedWith('Initializable: contract is already initialized');
+      await expect(payment.proxy.Payment_init(owner.address)).to.be.revertedWith(
+        'Initializable: contract is already initialized'
+      );
+    });
+  });
+
+  describe('supportsInterface()', async () => {
+    it('should support IPayment interface', async () => {
+      expect(await payment.proxy.supportsInterface('0xc514d018')).to.be.equal(true);
+    });
+    it('should support IERC165Upgradeable interface', async () => {
+      expect(await payment.proxy.supportsInterface('0x01ffc9a7')).to.be.equal(true);
     });
   });
 
   describe('setup()', async () => {
     it('should setup contract', async () => {
-      await payment.proxy.setup(dapp.address, farming.proxy.address, treasury.address, upo.implementation.address);
+      await payment.proxy.setup(pointToken.proxy.address, cashback.proxy.address, treasury.address, upo.address);
     });
     it('should revert if invalid caller', async () => {
       await expect(
         payment.proxy
           .connect(ivan)
-          .setup(dapp.address, farming.proxy.address, treasury.address, upo.implementation.address)
-      ).to.be.revertedWith('AccessControl');
+          .setup(pointToken.proxy.address, cashback.proxy.address, treasury.address, upo.address)
+      ).to.be.revertedWith('UUPSAC: forbidden');
     });
   });
 
-  describe('setMintToken()', async () => {
-    it('should set reward token', async () => {
-      await payment.proxy.setMintToken(dapp.address);
+  describe('setPointToken()', async () => {
+    it('should correctly set point token', async () => {
+      await payment.proxy.setPointToken(pointToken.proxy.address);
 
-      expect(await payment.proxy.mintToken()).to.be.equal(dapp.address);
+      expect(await payment.proxy.pointToken()).to.be.equal(pointToken.proxy.address);
     });
     it('should revert if invalid caller', async () => {
-      await expect(payment.proxy.connect(ivan).setMintToken(dapp.address)).to.be.revertedWith('AccessControl');
-    });
-  });
-
-  describe('setFarming()', async () => {
-    it('should set farming from 0', async () => {
-      await payment.proxy.setFarming(farming.proxy.address);
-
-      const paymentTokenSwapInfo = await payment.proxy.paymentTokenSwapInfo(usdt.proxy.address);
-      expect(paymentTokenSwapInfo.router).to.be.equal(farming.proxy.address);
-      expect(paymentTokenSwapInfo.sqrtPriceLimitX96).to.be.equal(0);
-      expect(paymentTokenSwapInfo.fee).to.be.equal(0);
-      expect(paymentTokenSwapInfo.multiplier).to.be.equal(0);
-
-      expect(await payment.proxy.farming()).to.be.equal(farming.proxy.address);
-      expect(await usdt.proxy.allowance(payment.proxy.address, farming.proxy.address)).to.be.equal(maxUint256);
-    });
-    it('should resset farming (1)', async () => {
-      await payment.proxy.setFarming(farming.proxy.address);
-
-      const farmingNew = await new FarmingDeployer().deployProxy();
-      await farmingNew.proxy.setTokens(dapp.address, usdt.proxy.address);
-
-      await payment.proxy.setFarming(farmingNew.proxy.address);
-
-      const paymentTokenSwapInfo = await payment.proxy.paymentTokenSwapInfo(usdt.proxy.address);
-      expect(paymentTokenSwapInfo.router).to.be.equal(farmingNew.proxy.address);
-      expect(paymentTokenSwapInfo.sqrtPriceLimitX96).to.be.equal(0);
-      expect(paymentTokenSwapInfo.fee).to.be.equal(0);
-      expect(paymentTokenSwapInfo.multiplier).to.be.equal(0);
-
-      expect(await payment.proxy.farming()).to.be.equal(farmingNew.proxy.address);
-      expect(await usdt.proxy.allowance(payment.proxy.address, farmingNew.proxy.address)).to.be.equal(maxUint256);
-    });
-    it('should resset farming (2)', async () => {
-      await payment.proxy.setFarming(farming.proxy.address);
-
-      const farmingNew = await new FarmingDeployer().deployProxy();
-      await farmingNew.proxy.setTokens(dapp.address, dai.proxy.address);
-
-      await payment.proxy.setFarming(farmingNew.proxy.address);
-
-      let paymentTokenSwapInfo = await payment.proxy.paymentTokenSwapInfo(usdt.proxy.address);
-      expect(paymentTokenSwapInfo.router).to.be.equal(zeroAddress);
-
-      paymentTokenSwapInfo = await payment.proxy.paymentTokenSwapInfo(dai.proxy.address);
-      expect(paymentTokenSwapInfo.router).to.be.equal(farmingNew.proxy.address);
-
-      expect(await payment.proxy.farming()).to.be.equal(farmingNew.proxy.address);
-      expect(await usdt.proxy.allowance(payment.proxy.address, farming.proxy.address)).to.be.equal('0');
-      expect(await dai.proxy.allowance(payment.proxy.address, farmingNew.proxy.address)).to.be.equal(maxUint256);
-    });
-    it("should rewert if farminig token isn't set", async () => {
-      const farmingNew = await new FarmingDeployer().deployProxy();
-      await farmingNew.proxy.setTokens(zeroAddress, zeroAddress);
-      await expect(payment.proxy.setFarming(farmingNew.proxy.address)).to.be.revertedWith(
-        "Payment: farminig token isn't set"
+      await expect(payment.proxy.connect(ivan).setPointToken(pointToken.proxy.address)).to.be.revertedWith(
+        'UUPSAC: forbidden'
       );
     });
-    it('should rewert if invalid new farming', async () => {
-      await expect(payment.proxy.setFarming(dapp.address)).to.be.revertedWith('Payment: invalid new farming');
+  });
+
+  describe('setCashback()', async () => {
+    it('should correctly set cashback', async () => {
+      await payment.proxy.setCashback(cashback.proxy.address);
+
+      expect(await payment.proxy.cashback()).to.be.equal(cashback.proxy.address);
+    });
+    it('should rewert if try to update to not a Cashback contract', async () => {
+      await expect(payment.proxy.setCashback(payment.proxy.address)).to.be.revertedWith(
+        'Payment: not Cashback contract'
+      );
     });
     it('should revert if invalid caller', async () => {
-      await expect(payment.proxy.connect(ivan).setFarming(dapp.address)).to.be.revertedWith('AccessControl');
+      await expect(payment.proxy.connect(ivan).setCashback(cashback.proxy.address)).to.be.revertedWith(
+        'UUPSAC: forbidden'
+      );
     });
   });
 
   describe('setTreasury()', async () => {
-    it('should set treasury', async () => {
+    it('should correctly set treasury', async () => {
       await payment.proxy.setTreasury(treasury.address);
 
       expect(await payment.proxy.treasury()).to.be.equal(treasury.address);
     });
     it('should revert if invalid caller', async () => {
-      await expect(payment.proxy.connect(ivan).setTreasury(treasury.address)).to.be.revertedWith('AccessControl');
+      await expect(payment.proxy.connect(ivan).setTreasury(treasury.address)).to.be.revertedWith('UUPSAC: forbidden');
     });
   });
 
@@ -154,372 +110,357 @@ describe('Payment', async () => {
 
     beforeEach(() => {
       swapInfo = {
-        router: router.address,
-        sqrtPriceLimitX96: '1',
-        fee: '3000',
-        multiplier: '1000',
+        poolFee: '3000',
+        secondsAgo: '600',
       };
     });
-    it('should set payment tokens', async () => {
-      await payment.proxy.setPaymentTokens([dai.proxy.address], [swapInfo], [true]);
+    it('should correctly set payment tokens', async () => {
+      await payment.proxy.setPaymentTokens([swapInfo, swapInfo], [dai.proxy.address, usdc.proxy.address], [true, true]);
 
-      let tokens = await payment.proxy.getPaymentTokens();
-      expect(tokens[0]).to.be.equal(dai.proxy.address);
-      expect(tokens.length).to.be.equal(1);
+      let token = await payment.proxy.getPaymentToken(0);
+      expect(token).to.be.equal(dai.proxy.address);
+
+      token = await payment.proxy.getPaymentToken(1);
+      expect(token).to.be.equal(usdc.proxy.address);
 
       let paymentTokenSwapInfo = await payment.proxy.paymentTokenSwapInfo(dai.proxy.address);
-      expect(paymentTokenSwapInfo.router).to.be.equal(router.address);
-      expect(paymentTokenSwapInfo.sqrtPriceLimitX96).to.be.equal(1);
-      expect(paymentTokenSwapInfo.fee).to.be.equal(3000);
-      expect(paymentTokenSwapInfo.multiplier).to.be.equal(1000);
+      expect(paymentTokenSwapInfo.poolFee).to.be.equal(3000);
+      expect(paymentTokenSwapInfo.secondsAgo).to.be.equal(600);
 
-      expect(await dai.proxy.allowance(payment.proxy.address, router.address)).to.be.equal(maxUint256);
+      paymentTokenSwapInfo = await payment.proxy.paymentTokenSwapInfo(usdc.proxy.address);
+      expect(paymentTokenSwapInfo.poolFee).to.be.equal(3000);
+      expect(paymentTokenSwapInfo.secondsAgo).to.be.equal(600);
     });
-    it('should reset payment tokens (1)', async () => {
-      await payment.proxy.setPaymentTokens([dai.proxy.address], [swapInfo], [true]);
+    it('should reset payment tokens', async () => {
+      await payment.proxy.setPaymentTokens([swapInfo, swapInfo], [dai.proxy.address, usdc.proxy.address], [true, true]);
 
-      swapInfo.router = router2.address;
-      swapInfo.sqrtPriceLimitX96 = '2';
-      swapInfo.fee = '4000';
-      swapInfo.multiplier = '2000';
-      await payment.proxy.setPaymentTokens([dai.proxy.address], [swapInfo], [true]);
-
-      let tokens = await payment.proxy.getPaymentTokens();
-      expect(tokens[0]).to.be.equal(dai.proxy.address);
-      expect(tokens.length).to.be.equal(1);
+      swapInfo.poolFee = '4000';
+      swapInfo.secondsAgo = '2000';
+      await payment.proxy.setPaymentTokens([swapInfo], [dai.proxy.address], [true]);
 
       let paymentTokenSwapInfo = await payment.proxy.paymentTokenSwapInfo(dai.proxy.address);
-      expect(paymentTokenSwapInfo.router).to.be.equal(router2.address);
-      expect(paymentTokenSwapInfo.sqrtPriceLimitX96).to.be.equal(2);
-      expect(paymentTokenSwapInfo.fee).to.be.equal(4000);
-      expect(paymentTokenSwapInfo.multiplier).to.be.equal(2000);
+      expect(paymentTokenSwapInfo.poolFee).to.be.equal(4000);
+      expect(paymentTokenSwapInfo.secondsAgo).to.be.equal(2000);
 
-      expect(await dai.proxy.allowance(payment.proxy.address, router.address)).to.be.equal('0');
-      expect(await dai.proxy.allowance(payment.proxy.address, router2.address)).to.be.equal(maxUint256);
-    });
-    it('should reset payment tokens (2)', async () => {
-      await payment.proxy.setPaymentTokens([dai.proxy.address], [swapInfo], [true]);
-
-      swapInfo.sqrtPriceLimitX96 = '2';
-      swapInfo.fee = '4000';
-      swapInfo.multiplier = '2000';
-      await payment.proxy.setPaymentTokens([dai.proxy.address], [swapInfo], [true]);
-
-      let tokens = await payment.proxy.getPaymentTokens();
-      expect(tokens[0]).to.be.equal(dai.proxy.address);
-      expect(tokens.length).to.be.equal(1);
-
-      let paymentTokenSwapInfo = await payment.proxy.paymentTokenSwapInfo(dai.proxy.address);
-      expect(paymentTokenSwapInfo.router).to.be.equal(router.address);
-      expect(paymentTokenSwapInfo.sqrtPriceLimitX96).to.be.equal(2);
-      expect(paymentTokenSwapInfo.fee).to.be.equal(4000);
-      expect(paymentTokenSwapInfo.multiplier).to.be.equal(2000);
-
-      expect(await dai.proxy.allowance(payment.proxy.address, router.address)).to.be.equal(maxUint256);
+      paymentTokenSwapInfo = await payment.proxy.paymentTokenSwapInfo(usdc.proxy.address);
+      expect(paymentTokenSwapInfo.poolFee).to.be.equal(3000);
+      expect(paymentTokenSwapInfo.secondsAgo).to.be.equal(600);
     });
     it('should remove payment tokens', async () => {
-      await payment.proxy.setPaymentTokens([dai.proxy.address], [], [false]);
+      await payment.proxy.setPaymentTokens([swapInfo, swapInfo], [dai.proxy.address, usdc.proxy.address], [true, true]);
+      await payment.proxy.setPaymentTokens([], [dai.proxy.address], [false]);
 
-      let tokens = await payment.proxy.getPaymentTokens();
-      expect(tokens.length).to.be.equal(0);
+      const token = await payment.proxy.getPaymentToken(0);
+      expect(token).to.be.equal(usdc.proxy.address);
 
-      await payment.proxy.setPaymentTokens([dai.proxy.address], [swapInfo], [true]);
-      await payment.proxy.setPaymentTokens([dai.proxy.address], [], [false]);
-
-      tokens = await payment.proxy.getPaymentTokens();
-      expect(tokens.length).to.be.equal(0);
-
-      let paymentTokenSwapInfo = await payment.proxy.paymentTokenSwapInfo(dai.proxy.address);
-      expect(paymentTokenSwapInfo.router).to.be.equal(zeroAddress);
-      expect(paymentTokenSwapInfo.sqrtPriceLimitX96).to.be.equal(0);
-      expect(paymentTokenSwapInfo.fee).to.be.equal(0);
-      expect(paymentTokenSwapInfo.multiplier).to.be.equal(0);
-
-      expect(await dai.proxy.allowance(payment.proxy.address, router.address)).to.be.equal('0');
+      await expect(payment.proxy.getPaymentToken(1)).to.be.revertedWith('panic');
     });
     it('should revert if invalid caller', async () => {
-      await expect(payment.proxy.connect(ivan).setPaymentTokens([], [], [])).to.be.revertedWith('AccessControl');
+      await expect(payment.proxy.connect(ivan).setPaymentTokens([], [], [])).to.be.revertedWith('UUPSAC: forbidden');
     });
   });
 
   describe('setUniPriceOracle()', async () => {
     it('should set uniswap price oracle', async () => {
-      await payment.proxy.setUniPriceOracle(upo.implementation.address);
-      expect(await payment.proxy.uniPriceOracle()).to.be.equal(upo.implementation.address);
+      await payment.proxy.setUniPriceOracle(upo.address);
 
-      await payment.proxy.setUniPriceOracle(dapp.address);
-      expect(await payment.proxy.uniPriceOracle()).to.be.equal(dapp.address);
+      expect(await payment.proxy.uniPriceOracle()).to.be.equal(upo.address);
     });
     it('should revert if invalid caller', async () => {
-      await expect(payment.proxy.connect(ivan).setUniPriceOracle(upo.implementation.address)).to.be.revertedWith(
-        'AccessControl'
-      );
+      await expect(payment.proxy.connect(ivan).setUniPriceOracle(upo.address)).to.be.revertedWith('UUPSAC: forbidden');
     });
   });
 
-  describe('pay(), without swap, usdt', async () => {
-    const ivanBalance = toWei('500', 6).toString();
+  describe('getSwapAmount()', async () => {
+    beforeEach(async () => {
+      await payment.proxy.setUniPriceOracle(upo.address);
+    });
+    it('should return mocked swap amount', async () => {
+      const amount = await payment.proxy.getSwapAmount(
+        dai.proxy.address,
+        pointToken.proxy.address,
+        toWei('1000', 6).toString()
+      );
+
+      expect(amount).to.be.equal(toWei('2000').toString());
+    });
+    it('should revert if invalid swap amount', async () => {
+      await expect(
+        payment.proxy.getSwapAmount(
+          pointToken.proxy.address,
+          dai.proxy.address,
+          '340282366920938463463374607431768211456'
+        )
+      ).to.be.revertedWith('Payment: discount amount too big');
+    });
+  });
+
+  describe('pay()', async () => {
+    const product = '0x8ae85d849167ff996c04040c44924fd364217285e4cad818292c7ac37c0a345b';
+    const ivanPointBalance = toWei('500', 6).toString();
+    const ivanDaiBalance = toWei('500').toString();
+    const ivanUsdcBalance = toWei('500', 6).toString();
 
     beforeEach(async () => {
-      const factoryRole = await payment.proxy.FACTORY_ROLE();
-      await payment.proxy.grantRole(factoryRole, factory.address);
+      swapInfo = {
+        poolFee: '3000',
+        secondsAgo: '600',
+      };
 
-      await payment.proxy.setup(dapp.address, farming.proxy.address, treasury.address, upo.implementation.address);
+      await payment.proxy.setup(pointToken.proxy.address, cashback.proxy.address, treasury.address, upo.address);
+      await payment.proxy.setPaymentTokens(
+        [swapInfo, swapInfo, swapInfo],
+        [pointToken.proxy.address, dai.proxy.address, usdc.proxy.address],
+        [true, true, true]
+      );
 
-      await usdt.proxy.transfer(ivan.address, ivanBalance);
-      await usdt.proxy.connect(ivan).approve(payment.proxy.address, ivanBalance);
-
-      await dapp.approve(farming.proxy.address, toWei('1').toString());
-      await farming.proxy.invest(toWei('1').toString());
+      await pointToken.proxy.transfer(ivan.address, ivanPointBalance);
+      await pointToken.proxy.connect(ivan).approve(payment.proxy.address, ivanPointBalance);
+      await dai.proxy.transfer(ivan.address, ivanDaiBalance);
+      await dai.proxy.connect(ivan).approve(payment.proxy.address, ivanDaiBalance);
+      await usdc.proxy.transfer(ivan.address, ivanUsdcBalance);
+      await usdc.proxy.connect(ivan).approve(payment.proxy.address, ivanUsdcBalance);
     });
-
-    it('should correctly pay, full transfer without exchange', async () => {
-      const price = toWei('100').toString();
-      const cashback = toWei('10').toString();
-
+    it('should correctly pay, `pointToken`, without discount', async () => {
+      const priceAmount = toWei('100').toString();
+      const cashbackAmount = toWei('10').toString();
       const priceInToken = toWei('100', 6).toString();
-      const cashbackInToken = toWei('10', 6).toString();
 
-      await payment.proxy.connect(factory).pay(usdt.proxy.address, ivan.address, price, cashback);
+      await payment.proxy
+        .connect(factory)
+        .pay(product, pointToken.proxy.address, ivan.address, priceAmount, cashbackAmount, [], []);
 
-      const ivanBaslanceInToken = toBN(ivanBalance).minus(priceInToken).toString();
-      const treasuryBalanceInToken = toBN(priceInToken).minus(cashbackInToken).toString();
+      const ivanBalanceInToken = toBN(ivanPointBalance).minus(priceInToken).toString();
 
-      expect(await usdt.proxy.balanceOf(ivan.address)).to.be.equal(ivanBaslanceInToken);
-      expect(await usdt.proxy.balanceOf(farming.proxy.address)).to.be.equal(cashbackInToken);
-      expect(await usdt.proxy.balanceOf(treasury.address)).to.be.equal(treasuryBalanceInToken);
+      expect(await pointToken.proxy.balanceOf(ivan.address)).to.be.equal(ivanBalanceInToken);
+      expect(await pointToken.proxy.balanceOf(treasury.address)).to.be.equal(priceInToken);
 
-      expect(await dapp.balanceOf(ivan.address)).to.be.equal(cashback);
+      const accountCahsback = await cashback.proxy.accountsCahsback(product, ivan.address);
+      const currentCashback = await cashback.proxy.getAccountCashback(product, ivan.address);
+      expect(await accountCahsback.points).to.be.equal(cashbackAmount);
+      expect(await currentCashback).to.be.equal(0);
     });
-    it('should correctly pay, price transfer without exchange and cashback', async () => {
-      const price = toWei('100').toString();
-      const cashback = toWei('0').toString();
+    it('should correctly pay, `pointToken`, with partial discount', async () => {
+      const priceAmount = toWei('100').toString();
+      const cashbackAmount = toWei('10').toString();
 
-      const priceInToken = toWei('100', 6).toString();
-      const cashbackInToken = toWei('0', 6).toString();
+      await payment.proxy
+        .connect(factory)
+        .pay(product, pointToken.proxy.address, ivan.address, priceAmount, cashbackAmount, [], []);
+      await payment.proxy
+        .connect(factory)
+        .pay(product, pointToken.proxy.address, ivan.address, priceAmount, cashbackAmount, [], []);
 
-      await payment.proxy.connect(factory).pay(usdt.proxy.address, ivan.address, price, cashback);
+      let accountCahsback = await cashback.proxy.accountsCahsback(product, ivan.address);
+      let currentCashback = await cashback.proxy.getAccountCashback(product, ivan.address);
+      expect(accountCahsback.points).to.be.equal(toWei('20').toString());
+      expect(currentCashback).to.be.equal(toWei('10').toString());
 
-      const ivanBaslanceInToken = toBN(ivanBalance).minus(priceInToken).toString();
-      const treasuryBalanceInToken = toBN(priceInToken).minus(cashbackInToken).toString();
+      await payment.proxy
+        .connect(factory)
+        .pay(
+          product,
+          pointToken.proxy.address,
+          ivan.address,
+          priceAmount,
+          cashbackAmount,
+          [product],
+          [toWei('10').toString()]
+        );
 
-      expect(await usdt.proxy.balanceOf(ivan.address)).to.be.equal(ivanBaslanceInToken);
-      expect(await usdt.proxy.balanceOf(farming.proxy.address)).to.be.equal(cashbackInToken);
-      expect(await usdt.proxy.balanceOf(treasury.address)).to.be.equal(treasuryBalanceInToken);
+      accountCahsback = await cashback.proxy.accountsCahsback(product, ivan.address);
+      currentCashback = await cashback.proxy.getAccountCashback(product, ivan.address);
+      expect(accountCahsback.points).to.be.equal(toWei('29').toString());
+      expect(currentCashback).to.be.equal(toWei('9').toString());
 
-      expect(await dapp.balanceOf(ivan.address)).to.be.equal(cashback);
+      await payment.proxy
+        .connect(factory)
+        .pay(
+          product,
+          pointToken.proxy.address,
+          ivan.address,
+          priceAmount,
+          cashbackAmount,
+          [product],
+          [toWei('5').toString()]
+        );
+
+      expect(await pointToken.proxy.balanceOf(ivan.address)).to.be.equal(toWei('115', 6).toString());
+      expect(await pointToken.proxy.balanceOf(treasury.address)).to.be.equal(toWei('385', 6).toString());
+
+      accountCahsback = await cashback.proxy.accountsCahsback(product, ivan.address);
+      currentCashback = await cashback.proxy.getAccountCashback(product, ivan.address);
+      expect(accountCahsback.points).to.be.equal(toWei('38.5').toString());
+      expect(currentCashback).to.be.closeTo(toWei('13.5').toString(), '1');
     });
-    it('should correctly pay, cashback transfer without exchange and treasury', async () => {
-      const price = toWei('100').toString();
-      const cashback = toWei('100').toString();
+    it('should correctly pay, `pointToken`, with full discount', async () => {
+      const priceAmount = toWei('100').toString();
+      const cashbackAmount = toWei('50').toString();
 
-      const priceInToken = toWei('100', 6).toString();
-      const cashbackInToken = toWei('100', 6).toString();
+      await payment.proxy
+        .connect(factory)
+        .pay(product, pointToken.proxy.address, ivan.address, priceAmount, cashbackAmount, [], []);
+      await payment.proxy
+        .connect(factory)
+        .pay(product, pointToken.proxy.address, ivan.address, priceAmount, cashbackAmount, [], []);
+      await payment.proxy
+        .connect(factory)
+        .pay(product, pointToken.proxy.address, ivan.address, priceAmount, cashbackAmount, [], []);
+      await payment.proxy
+        .connect(factory)
+        .pay(
+          product,
+          pointToken.proxy.address,
+          ivan.address,
+          priceAmount,
+          cashbackAmount,
+          [product],
+          [toWei('100').toString()]
+        );
 
-      await payment.proxy.connect(factory).pay(usdt.proxy.address, ivan.address, price, cashback);
+      expect(await pointToken.proxy.balanceOf(ivan.address)).to.be.equal(toWei('200', 6).toString());
+      expect(await pointToken.proxy.balanceOf(treasury.address)).to.be.equal(toWei('300', 6).toString());
 
-      const ivanBaslanceInToken = toBN(ivanBalance).minus(priceInToken).toString();
-      const treasuryBalanceInToken = toBN(priceInToken).minus(cashbackInToken).toString();
-
-      expect(await usdt.proxy.balanceOf(ivan.address)).to.be.equal(ivanBaslanceInToken);
-      expect(await usdt.proxy.balanceOf(farming.proxy.address)).to.be.equal(cashbackInToken);
-      expect(await usdt.proxy.balanceOf(treasury.address)).to.be.equal(treasuryBalanceInToken);
-
-      expect(await dapp.balanceOf(ivan.address)).to.be.equal(cashback);
+      accountCahsback = await cashback.proxy.accountsCahsback(product, ivan.address);
+      currentCashback = await cashback.proxy.getAccountCashback(product, ivan.address);
+      expect(accountCahsback.points).to.be.equal(toWei('150').toString());
+      expect(currentCashback).to.be.equal(toWei('0').toString());
     });
-    it('should correctly pay, no transfers', async () => {
-      const price = toWei('0').toString();
-      const cashback = toWei('0').toString();
+    it('should correctly pay, `usdc`, without discount', async () => {
+      await payment.proxy
+        .connect(factory)
+        .pay(product, usdc.proxy.address, ivan.address, toWei('100').toString(), toWei('10').toString(), [], []);
 
-      const priceInToken = toWei('0', 6).toString();
-      const cashbackInToken = toWei('0', 6).toString();
+      expect(await usdc.proxy.balanceOf(ivan.address)).to.be.equal(toWei('300', 6).toString());
+      expect(await usdc.proxy.balanceOf(treasury.address)).to.be.equal(toWei('200', 6).toString());
 
-      await payment.proxy.connect(factory).pay(usdt.proxy.address, ivan.address, price, cashback);
+      const accountCahsback = await cashback.proxy.accountsCahsback(product, ivan.address);
+      const currentCashback = await cashback.proxy.getAccountCashback(product, ivan.address);
+      expect(await accountCahsback.points).to.be.equal(toWei('10').toString());
+      expect(await currentCashback).to.be.equal(0);
+    });
+    it('should correctly pay, `usdc`, with discount', async () => {
+      const priceAmount = toWei('50').toString();
+      const cashbackAmount = toWei('10').toString();
 
-      const ivanBaslanceInToken = toBN(ivanBalance).minus(priceInToken).toString();
-      const treasuryBalanceInToken = toBN(priceInToken).minus(cashbackInToken).toString();
+      await payment.proxy
+        .connect(factory)
+        .pay(product, usdc.proxy.address, ivan.address, priceAmount, cashbackAmount, [], []);
+      await payment.proxy
+        .connect(factory)
+        .pay(product, usdc.proxy.address, ivan.address, priceAmount, cashbackAmount, [], []);
+      await payment.proxy
+        .connect(factory)
+        .pay(
+          product,
+          usdc.proxy.address,
+          ivan.address,
+          priceAmount,
+          cashbackAmount,
+          [product],
+          [toWei('10').toString()]
+        );
 
-      expect(await usdt.proxy.balanceOf(ivan.address)).to.be.equal(ivanBaslanceInToken);
-      expect(await usdt.proxy.balanceOf(farming.proxy.address)).to.be.equal(cashbackInToken);
-      expect(await usdt.proxy.balanceOf(treasury.address)).to.be.equal(treasuryBalanceInToken);
+      expect(await usdc.proxy.balanceOf(ivan.address)).to.be.equal(toWei('220', 6).toString());
+      expect(await usdc.proxy.balanceOf(treasury.address)).to.be.equal(toWei('280', 6).toString());
 
-      expect(await dapp.balanceOf(ivan.address)).to.be.equal(cashback);
+      const accountCahsback = await cashback.proxy.accountsCahsback(product, ivan.address);
+      const currentCashback = await cashback.proxy.getAccountCashback(product, ivan.address);
+      expect(await accountCahsback.points).to.be.equal(toWei('28').toString());
+      expect(await currentCashback).to.be.equal(toWei('8').toString());
+    });
+    it('should correctly pay, `usdc`, no price', async () => {
+      await payment.proxy.connect(factory).pay(product, usdc.proxy.address, ivan.address, 0, 0, [], []);
+
+      expect(await usdc.proxy.balanceOf(ivan.address)).to.be.equal(toWei('500', 6).toString());
+      expect(await usdc.proxy.balanceOf(treasury.address)).to.be.equal(toWei('0', 6).toString());
+    });
+    it('should correctly pay, `usdc`, without cashback', async () => {
+      await payment.proxy
+        .connect(factory)
+        .pay(product, usdc.proxy.address, ivan.address, toWei('100').toString(), 0, [], []);
+
+      expect(await usdc.proxy.balanceOf(ivan.address)).to.be.equal(toWei('300', 6).toString());
+      expect(await usdc.proxy.balanceOf(treasury.address)).to.be.equal(toWei('200', 6).toString());
+
+      const accountCahsback = await cashback.proxy.accountsCahsback(product, ivan.address);
+      const currentCashback = await cashback.proxy.getAccountCashback(product, ivan.address);
+      expect(await accountCahsback.points).to.be.equal(0);
+      expect(await currentCashback).to.be.equal(0);
     });
     it('should rewert if invalid sender', async () => {
-      await expect(payment.proxy.connect(ivan).pay(usdt.proxy.address, ivan.address, '0', '0')).to.be.revertedWith(
-        'AccessControl'
-      );
+      await expect(
+        payment.proxy.connect(ivan).pay(product, usdc.proxy.address, ivan.address, '1', '1', [], [])
+      ).to.be.revertedWith('UUPSAC: forbidden');
     });
     it("should rewert if treasury isn't set", async () => {
       await payment.proxy.setTreasury(zeroAddress);
 
       await expect(
-        payment.proxy.connect(factory).pay(usdt.proxy.address, ivan.address, toWei('1').toString(), '0')
+        payment.proxy.connect(factory).pay(product, usdc.proxy.address, ivan.address, '1', '1', [], [])
       ).to.be.revertedWith("Payment: treasury isn't set");
     });
     it('should rewert if invalid token on treasury transfer', async () => {
-      await expect(payment.proxy.connect(factory).pay(dapp.address, ivan.address, '1', '0')).to.be.revertedWith(
-        'Payment: invalid token (1)'
-      );
-    });
-    it('should rewert if invalid token on cashback transfer', async () => {
-      await expect(payment.proxy.connect(factory).pay(dapp.address, ivan.address, '1', '1')).to.be.revertedWith(
-        'Payment: invalid token (2)'
-      );
+      await expect(
+        payment.proxy.connect(factory).pay(product, owner.address, ivan.address, '1', '1', [], [])
+      ).to.be.revertedWith('Payment: invalid token');
     });
     it('should rewert if invalid amounts', async () => {
       await expect(
-        payment.proxy.connect(factory).pay(usdt.proxy.address, ivan.address, toWei(1).toString(), toWei(2).toString())
+        payment.proxy
+          .connect(factory)
+          .pay(product, usdc.proxy.address, ivan.address, toWei('10').toString(), toWei('11').toString(), [], [])
       ).to.be.revertedWith('Payment: invalid amounts');
     });
   });
 
-  describe('pay(), without swap, dai', async () => {
-    let farmingDai;
-    const ivanBalance = toWei('500').toString();
+  describe('payNative()', async () => {
+    let weth;
+    const product = '0x8ae85d849167ff996c04040c44924fd364217285e4cad818292c7ac37c0a345b';
 
     beforeEach(async () => {
-      const factoryRole = await payment.proxy.FACTORY_ROLE();
-      await payment.proxy.grantRole(factoryRole, factory.address);
-
-      farmingDai = await new FarmingDeployer().deployProxy();
-      await farmingDai.proxy.setTokens(dapp.address, dai.proxy.address);
-
-      await payment.proxy.setup(dapp.address, farmingDai.proxy.address, treasury.address, upo.implementation.address);
-
-      await dai.proxy.transfer(ivan.address, ivanBalance);
-      await dai.proxy.connect(ivan).approve(payment.proxy.address, ivanBalance);
-
-      await dapp.approve(farmingDai.proxy.address, toWei('1').toString());
-      await farmingDai.proxy.invest(toWei('1').toString());
-    });
-    it('should correctly pay, full transfer without exchange', async () => {
-      const price = toWei('100').toString();
-      const cashback = toWei('10').toString();
-
-      const priceInToken = toWei('100').toString();
-      const cashbackInToken = toWei('10').toString();
-
-      await payment.proxy.connect(factory).pay(dai.proxy.address, ivan.address, price, cashback);
-
-      const ivanBaslanceInToken = toBN(ivanBalance).minus(priceInToken).toString();
-      const treasuryBalanceInToken = toBN(priceInToken).minus(cashbackInToken).toString();
-
-      expect(await dai.proxy.balanceOf(ivan.address)).to.be.equal(ivanBaslanceInToken);
-      expect(await dai.proxy.balanceOf(farmingDai.proxy.address)).to.be.equal(cashbackInToken);
-      expect(await dai.proxy.balanceOf(treasury.address)).to.be.equal(treasuryBalanceInToken);
-
-      expect(await dapp.balanceOf(ivan.address)).to.be.equal(cashback);
-    });
-  });
-
-  describe('pay(), with swap, dai', async () => {
-    let farmingRT;
-    let rewardToken;
-    let swapRouterMock;
-    const ivanBalance = toWei('500').toString();
-
-    beforeEach(async () => {
-      const factoryRole = await payment.proxy.FACTORY_ROLE();
-      await payment.proxy.grantRole(factoryRole, factory.address);
-
-      rewardToken = await new ERC20Deployer().deployProxy([
-        'AAA',
-        'AAA',
-        toWei('10000').toString(),
-        owner.address,
-        '18',
-      ]);
-
-      farmingRT = await new FarmingDeployer().deployProxy();
-      await farmingRT.proxy.setTokens(dapp.address, rewardToken.proxy.address);
-
-      await payment.proxy.setup(dapp.address, farmingRT.proxy.address, treasury.address, upo.implementation.address);
-
-      // Start setup swap info
-      const UniswapV3FactoryMock = await ethers.getContractFactory('UniswapV3FactoryMock');
-      const uniswapV3FactoryMock = await UniswapV3FactoryMock.deploy();
-      const UniswapV3PoolMock = await ethers.getContractFactory('UniswapV3PoolMock');
-      const uniswapV3PoolMock = await UniswapV3PoolMock.deploy([20, 10], [20, 10]);
-
-      await uniswapV3FactoryMock.setPool(uniswapV3PoolMock.address);
-      await upo.implementation.setSwapConfig(uniswapV3FactoryMock.address, 10);
-
-      const SwapRouterMock = await ethers.getContractFactory('SwapRouterMock');
-      swapRouterMock = await SwapRouterMock.deploy();
-
       swapInfo = {
-        router: swapRouterMock.address,
-        sqrtPriceLimitX96: '1',
-        fee: '0',
-        multiplier: '0',
+        poolFee: '3000',
+        secondsAgo: '600',
       };
-      await payment.proxy.setPaymentTokens([dai.proxy.address], [swapInfo], [true]);
-      // End
+      const WETH9Mock = await ethers.getContractFactory('WETH9Mock');
+      weth = await WETH9Mock.deploy();
 
-      await rewardToken.proxy.transfer(swapRouterMock.address, toWei('9000').toString());
-      await dai.proxy.transfer(ivan.address, ivanBalance);
-      await dai.proxy.connect(ivan).approve(payment.proxy.address, ivanBalance);
-
-      await dapp.approve(farmingRT.proxy.address, toWei('1').toString());
-      await farmingRT.proxy.invest(toWei('1').toString());
+      await payment.proxy.setup(weth.address, cashback.proxy.address, treasury.address, upo.address);
+      await payment.proxy.setPaymentTokens([swapInfo], [weth.address], [true]);
     });
+    it('should correctly pay, `weth`', async () => {
+      await payment.proxy
+        .connect(factory)
+        .payNative(product, weth.address, ivan.address, toWei('2').toString(), toWei('1').toString(), [], [], {
+          value: toWei('2').toString(),
+        });
 
-    it('should correctly pay, full transfer without exchange', async () => {
-      const price = toWei('100').toString();
-      const cashback = toWei('10').toString();
-
-      const priceInToken = toWei('100').toString();
-      const cashbackInToken = toWei('10').toString();
-
-      await swapRouterMock.setRemainder('100');
-      await payment.proxy.connect(factory).pay(dai.proxy.address, ivan.address, price, cashback);
-
-      const cashbackAfterExchange = await payment.proxy.getInSwapAmount(dai.proxy.address, cashback);
-
-      const ivanBaslanceInToken = toBN(ivanBalance)
-        .minus(toWei('90').toString())
-        .minus(cashbackAfterExchange.toString())
-        .plus('100')
-        .toString();
-      const treasuryBalanceInToken = toBN(priceInToken).minus(cashbackInToken).toString();
-
-      expect(await dai.proxy.balanceOf(ivan.address)).to.be.equal(ivanBaslanceInToken);
-      expect(await rewardToken.proxy.balanceOf(farmingRT.proxy.address)).to.be.equal(cashbackInToken);
-      expect(await dai.proxy.balanceOf(treasury.address)).to.be.equal(treasuryBalanceInToken);
-
-      expect(await dapp.balanceOf(ivan.address)).to.be.equal(cashback);
+      await payment.proxy
+        .connect(factory)
+        .payNative(product, weth.address, ivan.address, toWei('2').toString(), toWei('1').toString(), [], [], {
+          value: toWei('3').toString(),
+        });
     });
-    it('should correctly pay, full transfer without exchange, without remainder', async () => {
-      const price = toWei('100').toString();
-      const cashback = toWei('10').toString();
-
-      const priceInToken = toWei('100').toString();
-      const cashbackInToken = toWei('10').toString();
-
-      await payment.proxy.connect(factory).pay(dai.proxy.address, ivan.address, price, cashback);
-
-      const cashbackAfterExchange = await payment.proxy.getInSwapAmount(dai.proxy.address, cashback);
-
-      const ivanBaslanceInToken = toBN(ivanBalance)
-        .minus(toWei('90').toString())
-        .minus(cashbackAfterExchange.toString())
-        .toString();
-      const treasuryBalanceInToken = toBN(priceInToken).minus(cashbackInToken).toString();
-
-      expect(await dai.proxy.balanceOf(ivan.address)).to.be.equal(ivanBaslanceInToken);
-      expect(await rewardToken.proxy.balanceOf(farmingRT.proxy.address)).to.be.equal(cashbackInToken);
-      expect(await dai.proxy.balanceOf(treasury.address)).to.be.equal(treasuryBalanceInToken);
-
-      expect(await dapp.balanceOf(ivan.address)).to.be.equal(cashback);
+    it('should revert on invalid payer', async () => {
+      await expect(
+        payment.proxy
+          .connect(factory)
+          .payNative(product, weth.address, upo.address, toWei('2').toString(), toWei('1').toString(), [], [], {
+            value: toWei('3').toString(),
+          })
+      ).to.be.revertedWith('Payment: failed to send');
     });
   });
 
-  describe('_authorizeUpgrade()', async () => {
-    it('should upgrade contract', async () => {
-      const newPayment = await new PaymentDeployer().deployProxy();
-
-      await payment.proxy.upgradeTo(newPayment.implementation.address);
+  describe('receive()', async () => {
+    it('should revert when invalid sender', async () => {
+      await expect(
+        owner.sendTransaction({
+          to: payment.proxy.address,
+          value: 10000,
+        })
+      ).to.be.revertedWith('Payment: native transfer forbidden');
     });
   });
 });

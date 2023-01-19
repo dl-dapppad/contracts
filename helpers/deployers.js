@@ -2,6 +2,8 @@ const ProductFactoryDeployer = require('./deployer/factory/product-factory/Produ
 const PaymentDeployer = require('./deployer/Payment.deployer');
 const UniswapPriceOracleDeployer = require('./deployer/UniswapPriceOracle.deployer');
 const TokenDeployer = require('./deployer/Token.deployer');
+const AccessControlDeployer = require('./deployer/AccessControl.deployer');
+const CashbackDeployer = require('./deployer/Cashback.deployer');
 
 // Implementations
 const FarmingDeployer = require('./deployer/implementations/farming/Farming.deployer');
@@ -24,6 +26,8 @@ module.exports = {
   PaymentDeployer,
   UniswapPriceOracleDeployer,
   TokenDeployer,
+  AccessControlDeployer,
+  CashbackDeployer,
   FarmingDeployer,
   ERC20Deployer,
   ERC20BurnDeployer,

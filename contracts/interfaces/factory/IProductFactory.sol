@@ -20,6 +20,8 @@ interface IProductFactory {
      * @param alias_ Product alias
      * @param paymentToken_ Address buy product for this token
      * @param initializeData_ Constructor bytes
+     * @param discountAliases_ Discount product pool
+     * @param discounts_ Discount amout, base decimals
      */
     function deploy(
         bytes32 alias_,
@@ -27,7 +29,7 @@ interface IProductFactory {
         bytes calldata initializeData_,
         bytes32[] calldata discountAliases_,
         uint256[] calldata discounts_
-    ) external returns (address);
+    ) external payable returns (address);
 
     /**
      * @notice Return potential contract address

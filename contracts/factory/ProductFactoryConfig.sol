@@ -155,7 +155,7 @@ abstract contract ProductFactoryConfig is UUPSAccessControl, IProductFactoryConf
         returns (address contractAddress)
     {
         assembly {
-            contractAddress := create2(callvalue(), add(bytecode_, 0x20), mload(bytecode_), salt_)
+            contractAddress := create2(0, add(bytecode_, 0x20), mload(bytecode_), salt_)
         }
     }
 }

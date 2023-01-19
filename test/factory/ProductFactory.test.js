@@ -4,43 +4,46 @@ const {
   ERC20Deployer,
   ProductFactoryDeployer,
   PaymentDeployer,
-  FarmingDeployer,
-  TokenDeployer,
+  AccessControlDeployer,
+  CashbackDeployer,
 } = require('../../helpers/deployers');
 
 describe('ProductFactory', async () => {
   const keccak256_erc20 = '0x9b9b0454cadcb5884dd3faa6ba975da4d2459aa3f11d31291a25a8358f84946d';
 
-  let productFactory, payment, farming, erc20, usdt, dapp;
+  let productFactory, payment, usdt;
   let owner, ivan, treasury;
 
   beforeEach('setup', async () => {
     [owner, ivan, treasury] = await ethers.getSigners();
 
-    productFactory = await new ProductFactoryDeployer().deployProxy();
-    payment = await new PaymentDeployer().deployProxy();
-    usdt = await new ERC20Deployer().deployProxy(['USDT', 'USDT', toWei('1000').toString(), owner.address, '18']);
-    erc20 = await new ERC20Deployer().deployProxy(['N', 'S', '100', owner.address, '8']);
+    pointToken = await new ERC20Deployer().deployProxy(['PT', 'PT', toWei('1000').toString(), owner.address, '18']);
+    usdt = await new ERC20Deployer().deployProxy(['USD Coin', 'USDC', toWei('1000').toString(), owner.address, '6']);
+    dai = await new ERC20Deployer().deployProxy(['DAI', 'DAI', toWei('1000').toString(), owner.address, '18']);
 
-    const Token = await ethers.getContractFactory('Token');
-    dapp = await new TokenDeployer().deploy(['N', 'S']);
+    accessControl = await new AccessControlDeployer().deploy();
+    payment = await new PaymentDeployer().deployProxy([accessControl.implementation.address]);
+    cashback = await new CashbackDeployer().deployProxy([accessControl.implementation.address]);
+    productFactory = await new ProductFactoryDeployer().deployProxy([accessControl.implementation.address]);
 
-    const minterRole = await dapp.implementation.MINTER_ROLE();
-    await dapp.implementation.grantRole(minterRole, payment.proxy.address);
-    await dapp.implementation.grantRole(minterRole, owner.address);
-    await dapp.implementation.mint(owner.address, toWei('1').toString());
-    await dapp.implementation.revokeRole(minterRole, owner.address);
-
-    farming = await new FarmingDeployer().deployProxy();
-    await farming.proxy.setTokens(dapp.implementation.address, usdt.proxy.address);
+    // Setup roles
+    const PAYMENT_CONTRACT_ROLE = await cashback.proxy.PAYMENT_CONTRACT_ROLE();
+    const PAYMENT_ROLE = await payment.proxy.PAYMENT_ROLE();
+    const FACTORY_CONTRACT_ROLE = await payment.proxy.FACTORY_CONTRACT_ROLE();
+    const PRODUCT_FACTORY_ROLE = await productFactory.proxy.PRODUCT_FACTORY_ROLE();
+    await accessControl.implementation.grantRole(PAYMENT_CONTRACT_ROLE, payment.proxy.address);
+    await accessControl.implementation.grantRole(PAYMENT_ROLE, owner.address);
+    await accessControl.implementation.grantRole(FACTORY_CONTRACT_ROLE, productFactory.proxy.address);
+    await accessControl.implementation.grantRole(PRODUCT_FACTORY_ROLE, owner.address);
+    // End
   });
 
-  describe('TokenFactory_init()', async () => {
+  describe('ProductFactory_init()', async () => {
     it('should initialize', async () => {
-      expect(await productFactory.proxy.owner()).to.be.equal(owner.address);
+      expect(await productFactory.proxy.accessControl()).to.be.equal(accessControl.implementation.address);
     });
     it('should revert on second initialize', async () => {
-      await expect(productFactory.proxy.ProductFactory_init()).to.be.revertedWith(
+      await expect(productFactory.proxy.ProductFactory_init(owner.address)).to.be.revertedWith(
         'Initializable: contract is already initialized'
       );
     });
@@ -50,7 +53,7 @@ describe('ProductFactory', async () => {
     it('should setup product configs', async () => {
       await productFactory.proxy.setupProduct(
         keccak256_erc20,
-        erc20.implementation.address,
+        dai.implementation.address,
         '100',
         '50',
         percentToDecimal('100').toString(),
@@ -62,7 +65,7 @@ describe('ProductFactory', async () => {
       expect((await productFactory.proxy.getProducts()).length).to.be.equal(1);
 
       const product = await productFactory.proxy.products(keccak256_erc20);
-      expect(product.implementation).to.be.equal(erc20.implementation.address);
+      expect(product.implementation).to.be.equal(dai.implementation.address);
       expect(product.currentPrice).to.be.equal('100');
       expect(product.minPrice).to.be.equal('50');
       expect(product.decreasePercent).to.be.equal(percentToDecimal('100').toString());
@@ -87,7 +90,7 @@ describe('ProductFactory', async () => {
     });
     it('should revert if invalid caller', async () => {
       await expect(productFactory.proxy.connect(ivan).addProduct(keccak256_erc20)).to.be.revertedWith(
-        'Ownable: caller is not the owner'
+        'UUPSAC: forbidden'
       );
     });
   });
@@ -100,7 +103,7 @@ describe('ProductFactory', async () => {
     });
     it('should revert if invalid caller', async () => {
       await expect(productFactory.proxy.connect(ivan).setPayment(payment.proxy.address)).to.be.revertedWith(
-        'Ownable: caller is not the owner'
+        'UUPSAC: forbidden'
       );
     });
   });
@@ -110,21 +113,21 @@ describe('ProductFactory', async () => {
       await productFactory.proxy.addProduct(keccak256_erc20);
     });
     it('should set implementation contract', async () => {
-      await productFactory.proxy.setImplementation(keccak256_erc20, erc20.implementation.address);
+      await productFactory.proxy.setImplementation(keccak256_erc20, dai.implementation.address);
 
       const product = await productFactory.proxy.products(keccak256_erc20);
-      expect(product.implementation).to.be.equal(erc20.implementation.address);
+      expect(product.implementation).to.be.equal(dai.implementation.address);
     });
     it('should revert if invalid caller', async () => {
       await expect(
-        productFactory.proxy.connect(ivan).setImplementation(keccak256_erc20, erc20.implementation.address)
-      ).to.be.revertedWith('Ownable: caller is not the owner');
+        productFactory.proxy.connect(ivan).setImplementation(keccak256_erc20, dai.implementation.address)
+      ).to.be.revertedWith('UUPSAC: forbidden');
     });
     it('should revert if alias not found', async () => {
       await expect(
         productFactory.proxy.setImplementation(
           '0x9b9b0454cadcb5884dd3faa6ba975da4d2459aa3f11d31291a25a8358f849463',
-          erc20.implementation.address
+          dai.implementation.address
         )
       ).to.be.revertedWith('PFC: not found');
     });
@@ -135,7 +138,7 @@ describe('ProductFactory', async () => {
       await productFactory.proxy.addProduct(keccak256_erc20);
     });
     it('should set prices', async () => {
-      await productFactory.proxy.setImplementation(keccak256_erc20, erc20.implementation.address);
+      await productFactory.proxy.setImplementation(keccak256_erc20, dai.implementation.address);
       await productFactory.proxy.setPrices(keccak256_erc20, '100', '50');
 
       let product = await productFactory.proxy.products(keccak256_erc20);
@@ -154,15 +157,15 @@ describe('ProductFactory', async () => {
       );
     });
     it('should revert if invalid prices', async () => {
-      await productFactory.proxy.setImplementation(keccak256_erc20, erc20.implementation.address);
+      await productFactory.proxy.setImplementation(keccak256_erc20, dai.implementation.address);
       await expect(productFactory.proxy.setPrices(keccak256_erc20, '49', '50')).to.be.revertedWith(
         'PFC: invalid prices'
       );
     });
     it('should revert if invalid caller', async () => {
-      await productFactory.proxy.setImplementation(keccak256_erc20, erc20.implementation.address);
+      await productFactory.proxy.setImplementation(keccak256_erc20, dai.implementation.address);
       await expect(productFactory.proxy.connect(ivan).setPrices(keccak256_erc20, '100', '50')).to.be.revertedWith(
-        'Ownable: caller is not the owner'
+        'UUPSAC: forbidden'
       );
     });
   });
@@ -170,7 +173,7 @@ describe('ProductFactory', async () => {
   describe('setPercents()', async () => {
     beforeEach(async () => {
       await productFactory.proxy.addProduct(keccak256_erc20);
-      await productFactory.proxy.setImplementation(keccak256_erc20, erc20.implementation.address);
+      await productFactory.proxy.setImplementation(keccak256_erc20, dai.implementation.address);
     });
     it('should set percents', async () => {
       await productFactory.proxy.setPercents(keccak256_erc20, percentToDecimal('100').toString(), '0');
@@ -202,7 +205,7 @@ describe('ProductFactory', async () => {
   describe('setStatus()', async () => {
     beforeEach(async () => {
       await productFactory.proxy.addProduct(keccak256_erc20);
-      await productFactory.proxy.setImplementation(keccak256_erc20, erc20.implementation.address);
+      await productFactory.proxy.setImplementation(keccak256_erc20, dai.implementation.address);
     });
     it('should change product status', async () => {
       expect((await productFactory.proxy.products(keccak256_erc20)).isActive).to.be.equal(false);
@@ -220,7 +223,7 @@ describe('ProductFactory', async () => {
   describe('getNewPrice()', async () => {
     beforeEach(async () => {
       await productFactory.proxy.addProduct(keccak256_erc20);
-      await productFactory.proxy.setImplementation(keccak256_erc20, erc20.implementation.address);
+      await productFactory.proxy.setImplementation(keccak256_erc20, dai.implementation.address);
     });
     it('should correctly calculate new price', async () => {
       // Base
@@ -246,7 +249,7 @@ describe('ProductFactory', async () => {
   describe('getCashback()', async () => {
     beforeEach(async () => {
       await productFactory.proxy.addProduct(keccak256_erc20);
-      await productFactory.proxy.setImplementation(keccak256_erc20, erc20.implementation.address);
+      await productFactory.proxy.setImplementation(keccak256_erc20, dai.implementation.address);
     });
     it('should correctly calculate cashback', async () => {
       // Base
@@ -268,21 +271,25 @@ describe('ProductFactory', async () => {
   describe('getPotentialContractAddress()', async () => {
     beforeEach(async () => {
       await productFactory.proxy.addProduct(keccak256_erc20);
-      await productFactory.proxy.setImplementation(keccak256_erc20, erc20.implementation.address);
+      await productFactory.proxy.setImplementation(keccak256_erc20, dai.implementation.address);
       await productFactory.proxy.setStatus(keccak256_erc20, true);
 
       await productFactory.proxy.setPayment(payment.proxy.address);
 
-      const factoryRole = await payment.proxy.FACTORY_ROLE();
-      await payment.proxy.grantRole(factoryRole, productFactory.proxy.address);
+      const swapInfo = {
+        poolFee: '3000',
+        secondsAgo: '600',
+      };
+      await payment.proxy.setup(pointToken.proxy.address, cashback.proxy.address, treasury.address, zeroAddress);
+      await payment.proxy.setPaymentTokens([swapInfo], [pointToken.proxy.address], [true]);
     });
     it('should correctly get potential address', async () => {
       let potentialAddress = await productFactory.proxy.getPotentialContractAddress(
         keccak256_erc20,
-        erc20.initializeData
+        dai.initializeData
       );
 
-      let tx = await productFactory.proxy.deploy(keccak256_erc20, usdt.proxy.address, erc20.initializeData);
+      let tx = await productFactory.proxy.deploy(keccak256_erc20, pointToken.proxy.address, dai.initializeData, [], []);
       let receipt = await tx.wait();
       let actualAddress = receipt.events[receipt.events.length - 1].args.proxy;
 
@@ -290,9 +297,9 @@ describe('ProductFactory', async () => {
 
       // -----
 
-      potentialAddress = await productFactory.proxy.getPotentialContractAddress(keccak256_erc20, erc20.initializeData);
+      potentialAddress = await productFactory.proxy.getPotentialContractAddress(keccak256_erc20, usdt.initializeData);
 
-      tx = await productFactory.proxy.deploy(keccak256_erc20, dapp.implementation.address, erc20.initializeData);
+      tx = await productFactory.proxy.deploy(keccak256_erc20, pointToken.proxy.address, usdt.initializeData, [], []);
       receipt = await tx.wait();
       actualAddress = receipt.events[receipt.events.length - 1].args.proxy;
 
@@ -302,15 +309,15 @@ describe('ProductFactory', async () => {
       keccak256_max = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
       await productFactory.proxy.addProduct(keccak256_max);
-      await productFactory.proxy.setImplementation(keccak256_max, erc20.implementation.address);
+      await productFactory.proxy.setImplementation(keccak256_max, dai.implementation.address);
       await productFactory.proxy.setStatus(keccak256_max, true);
 
       const potentialAddress = await productFactory.proxy.getPotentialContractAddress(
         keccak256_max,
-        erc20.initializeData
+        dai.initializeData
       );
 
-      const tx = await productFactory.proxy.deploy(keccak256_max, usdt.proxy.address, erc20.initializeData);
+      const tx = await productFactory.proxy.deploy(keccak256_max, pointToken.proxy.address, dai.initializeData, [], []);
       const receipt = await tx.wait();
       const actualAddress = receipt.events[receipt.events.length - 1].args.proxy;
 
@@ -319,12 +326,11 @@ describe('ProductFactory', async () => {
   });
 
   describe('deploy()', async () => {
-    beforeEach(async () => {
-      const factoryRole = await payment.proxy.FACTORY_ROLE();
-      await payment.proxy.grantRole(factoryRole, productFactory.proxy.address);
+    let weth;
 
+    beforeEach(async () => {
       await productFactory.proxy.addProduct(keccak256_erc20);
-      await productFactory.proxy.setImplementation(keccak256_erc20, erc20.implementation.address);
+      await productFactory.proxy.setImplementation(keccak256_erc20, dai.implementation.address);
       await productFactory.proxy.setPrices(keccak256_erc20, toWei('100').toString(), toWei('60').toString());
       await productFactory.proxy.setPercents(
         keccak256_erc20,
@@ -334,67 +340,97 @@ describe('ProductFactory', async () => {
       await productFactory.proxy.setStatus(keccak256_erc20, true);
       await productFactory.proxy.setPayment(payment.proxy.address);
 
-      await payment.proxy.setup(dapp.implementation.address, farming.proxy.address, treasury.address, zeroAddress);
+      // For native payment
+      const WETH9Mock = await ethers.getContractFactory('WETH9Mock');
+      weth = await WETH9Mock.deploy();
+      // End
 
-      await usdt.proxy.transfer(ivan.address, toWei('500').toString());
-      await usdt.proxy.approve(payment.proxy.address, toWei('500').toString());
-      await usdt.proxy.connect(ivan).approve(payment.proxy.address, toWei('500').toString());
+      const swapInfo = {
+        poolFee: '3000',
+        secondsAgo: '600',
+      };
+      await payment.proxy.setup(pointToken.proxy.address, cashback.proxy.address, treasury.address, zeroAddress);
+      await payment.proxy.setPaymentTokens(
+        [swapInfo, swapInfo],
+        [pointToken.proxy.address, weth.address],
+        [true, true]
+      );
 
-      await dapp.implementation.approve(farming.proxy.address, toWei('1').toString());
-      await farming.proxy.invest(toWei('1').toString());
+      await pointToken.proxy.transfer(ivan.address, toWei('500').toString());
+      await pointToken.proxy.connect(ivan).approve(payment.proxy.address, toWei('500').toString());
     });
     it('should correctly deploy new proxy', async () => {
       const newTokenAddress = await productFactory.proxy
         .connect(ivan)
-        .getPotentialContractAddress(keccak256_erc20, erc20.initializeData);
-      const factory = await erc20.getImplementationFactory();
+        .getPotentialContractAddress(keccak256_erc20, dai.initializeData);
+      const factory = await dai.getImplementationFactory();
       const newToken = await factory.attach(newTokenAddress);
 
       const tx = await productFactory.proxy
         .connect(ivan)
-        .deploy(keccak256_erc20, usdt.proxy.address, erc20.initializeData);
-      const receipt = await tx.wait();
+        .deploy(keccak256_erc20, pointToken.proxy.address, dai.initializeData, [], []);
+      await tx.wait();
 
       expect(await newToken.owner()).to.be.equal(ivan.address);
-      expect(await newToken.name()).to.be.equal('N');
-      expect(await newToken.symbol()).to.be.equal('S');
-      expect((await newToken.decimals()).toString()).to.be.equal('8');
-      expect((await newToken.balanceOf(owner.address)).toString()).to.be.equal('100');
+      expect(await newToken.name()).to.be.equal('DAI');
+      expect(await newToken.symbol()).to.be.equal('DAI');
+      expect((await newToken.decimals()).toString()).to.be.equal('18');
+      expect((await newToken.balanceOf(owner.address)).toString()).to.be.equal(toWei('1000').toString());
+    });
+    it('should correctly deploy new proxy, native payment', async () => {
+      await productFactory.proxy.setPrices(keccak256_erc20, toWei('2').toString(), toWei('1').toString());
+      await payment.proxy.setPointToken(weth.address);
+
+      const newTokenAddress = await productFactory.proxy
+        .connect(ivan)
+        .getPotentialContractAddress(keccak256_erc20, dai.initializeData);
+      const factory = await dai.getImplementationFactory();
+      const newToken = await factory.attach(newTokenAddress);
+
+      const tx = await productFactory.proxy
+        .connect(ivan)
+        .deploy(keccak256_erc20, weth.address, dai.initializeData, [], [], {
+          value: toWei('2').toString(),
+        });
+      await tx.wait();
+
+      expect(await newToken.owner()).to.be.equal(ivan.address);
+      expect(await newToken.name()).to.be.equal('DAI');
+      expect(await newToken.symbol()).to.be.equal('DAI');
+      expect((await newToken.decimals()).toString()).to.be.equal('18');
+      expect((await newToken.balanceOf(owner.address)).toString()).to.be.equal(toWei('1000').toString());
     });
     it('should correctly change storage', async () => {
-      await productFactory.proxy.connect(ivan).deploy(keccak256_erc20, usdt.proxy.address, erc20.initializeData);
+      await productFactory.proxy
+        .connect(ivan)
+        .deploy(keccak256_erc20, pointToken.proxy.address, dai.initializeData, [], []);
 
       let product = await productFactory.proxy.products(keccak256_erc20);
       expect(product.currentPrice).to.be.equal(toWei('80').toString());
       expect(product.salesCount).to.be.equal(1);
 
-      await productFactory.proxy.connect(ivan).deploy(keccak256_erc20, usdt.proxy.address, erc20.initializeData);
+      await productFactory.proxy
+        .connect(ivan)
+        .deploy(keccak256_erc20, pointToken.proxy.address, dai.initializeData, [], []);
 
       product = await productFactory.proxy.products(keccak256_erc20);
       expect(product.currentPrice).to.be.equal(toWei('64').toString());
       expect(product.salesCount).to.be.equal(2);
 
-      await productFactory.proxy.connect(ivan).deploy(keccak256_erc20, usdt.proxy.address, erc20.initializeData);
+      await productFactory.proxy
+        .connect(ivan)
+        .deploy(keccak256_erc20, pointToken.proxy.address, dai.initializeData, [], []);
 
       product = await productFactory.proxy.products(keccak256_erc20);
       expect(product.currentPrice).to.be.equal(toWei('60').toString());
       expect(product.salesCount).to.be.equal(3);
     });
-    it('should correctly make full payments', async () => {
-      await productFactory.proxy.connect(ivan).deploy(keccak256_erc20, usdt.proxy.address, erc20.initializeData);
-
-      expect(await usdt.proxy.balanceOf(ivan.address)).to.be.equal(toWei('400').toString());
-      expect(await usdt.proxy.balanceOf(farming.proxy.address)).to.be.equal(toWei('10').toString()); // 10% - cashback
-      expect(await usdt.proxy.balanceOf(treasury.address)).to.be.equal(toWei('90').toString()); // 90% - to treasury
-
-      expect(await dapp.implementation.balanceOf(ivan.address)).to.be.equal(toWei('10').toString());
-    });
     it('should revert if product inactive', async () => {
       await productFactory.proxy.setStatus(keccak256_erc20, false);
 
       await expect(
-        productFactory.proxy.deploy(keccak256_erc20, usdt.proxy.address, erc20.initializeData)
-      ).to.be.revertedWith('TF: inactive product');
+        productFactory.proxy.deploy(keccak256_erc20, pointToken.proxy.address, dai.initializeData, [], [])
+      ).to.be.revertedWith('PF: inactive product');
     });
   });
 });

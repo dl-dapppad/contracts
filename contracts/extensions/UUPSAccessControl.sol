@@ -13,9 +13,8 @@ abstract contract UUPSAccessControl is UUPSUpgradeable {
 
     modifier hasRole(bytes32 role_) {
         require(
-            IAccessControlUpgradeable(accessControl).hasRole(role_, msg.sender) ||
-                IAccessControlUpgradeable(accessControl).hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
-            "ACB: forbidden"
+            IAccessControlUpgradeable(accessControl).hasRole(role_, msg.sender),
+            "UUPSAC: forbidden"
         );
         _;
     }
@@ -40,13 +39,13 @@ abstract contract UUPSAccessControl is UUPSUpgradeable {
             IERC165Upgradeable(accessControl_).supportsInterface(
                 type(IAccessControlUpgradeable).interfaceId
             ),
-            "ACB: invalid address"
+            "UUPSAC: invalid address"
         );
 
         accessControl = accessControl_;
     }
 
     function _authorizeUpgrade(address) internal view override hasRole(DEFAULT_ADMIN_ROLE) {
-        require(!isNotUpgradeable, "UUPSOwnable: upgrade isn't available");
+        require(!isNotUpgradeable, "UUPSAC: upgrade isn't available");
     }
 }

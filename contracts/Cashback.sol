@@ -41,27 +41,32 @@ contract Cashback is ERC165Upgradeable, UUPSAccessControl, ICashback {
         uint256 amount_,
         address recipient_
     ) external hasRole(PAYMENT_CONTRACT_ROLE) {
+        require(amount_ > 0, "Cashback: invalid amount");
+
         ProductCahsback storage productCahsback = productsCahsback[product_];
         AccountCashback storage accountCahsback = accountsCahsback[product_][recipient_];
 
         ProductCahsback memory productCahsback_ = productCahsback;
         AccountCashback memory accountCahsback_ = accountCahsback;
 
-        accountCahsback.pendingCashback = _getAccountCashback(
-            accountCahsback_,
-            productCahsback_.cumulativeSum
-        );
-
-        if (productCahsback_.totalPoints != 0) {
-            productCahsback.cumulativeSum =
+        uint256 cumulativeSum_;
+        if (productCahsback_.totalPoints == 0) {
+            cumulativeSum_ = amount_;
+        } else {
+            cumulativeSum_ =
                 productCahsback_.cumulativeSum +
                 (amount_ * PRECISION) /
                 productCahsback_.totalPoints;
-            accountCahsback.cumulativeSum = productCahsback.cumulativeSum;
         }
 
+        accountCahsback.pendingCashback = _getAccountCashback(accountCahsback_, cumulativeSum_);
+
+        productCahsback.cumulativeSum = cumulativeSum_;
+        accountCahsback.cumulativeSum = cumulativeSum_;
         productCahsback.totalPoints = productCahsback_.totalPoints + amount_;
         accountCahsback.points = accountCahsback_.points + amount_;
+
+        emit PointsMited(recipient_, product_, amount_);
     }
 
     function useCashback(
@@ -71,26 +76,32 @@ contract Cashback is ERC165Upgradeable, UUPSAccessControl, ICashback {
     ) external hasRole(PAYMENT_CONTRACT_ROLE) returns (uint256) {
         uint256 cashbackAmount_;
         for (uint256 i = 0; i < products_.length; i++) {
+            uint256 amount_ = amounts_[i];
+            if (amount_ == 0) {
+                continue;
+            }
+
             AccountCashback storage accountCahsback = accountsCahsback[products_[i]][sender_];
-            uint256 productCumulativeSum = productsCahsback[products_[i]].cumulativeSum;
+            uint256 productCumulativeSum_ = productsCahsback[products_[i]].cumulativeSum;
 
             uint256 cashbackFromProduct_ = _getAccountCashback(
                 accountCahsback,
-                productCumulativeSum
+                productCumulativeSum_
             );
 
             if (cashbackFromProduct_ == 0) {
                 continue;
             }
 
-            if (cashbackFromProduct_ < amounts_[i]) {
-                accountCahsback.pendingCashback = 0;
-                cashbackAmount_ += cashbackFromProduct_;
-            } else {
-                accountCahsback.pendingCashback = cashbackFromProduct_ - amounts_[i];
-                cashbackAmount_ += amounts_[i];
+            if (cashbackFromProduct_ < amount_) {
+                amount_ = cashbackFromProduct_;
             }
-            accountCahsback.cumulativeSum = productCumulativeSum;
+
+            accountCahsback.cumulativeSum = productCumulativeSum_;
+            accountCahsback.pendingCashback = cashbackFromProduct_ - amount_;
+            cashbackAmount_ += amount_;
+
+            emit CashbackUsed(sender_, products_[i], amount_);
         }
 
         return cashbackAmount_;
@@ -101,7 +112,7 @@ contract Cashback is ERC165Upgradeable, UUPSAccessControl, ICashback {
         view
         returns (uint256[] memory)
     {
-        uint256[] memory amounts_;
+        uint256[] memory amounts_ = new uint256[](products_.length);
         for (uint256 i = 0; i < products_.length; i++) {
             amounts_[i] = _getAccountCashback(
                 accountsCahsback[products_[i]][account_],

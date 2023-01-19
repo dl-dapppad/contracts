@@ -10,6 +10,7 @@ module.exports = {
   plugins: ['prettier'],
   rules: {
     ts: 'off',
+    'no-return-await': 'error',
     'prettier/prettier': ['error', { singleQuote: true, printWidth: 120 }],
   },
 };

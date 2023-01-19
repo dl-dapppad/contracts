@@ -21,23 +21,35 @@ contract ProductFactory is ProductFactoryConfig, IProductFactory {
         bytes calldata initializeData_,
         bytes32[] calldata discountAliases_,
         uint256[] calldata discounts_
-    ) external returns (address) {
+    ) external payable returns (address) {
         Product storage product = _getProduct(alias_);
 
-        require(product.isActive, "TF: inactive product");
+        require(product.isActive, "PF: inactive product");
 
         uint256 currentPrice_ = product.currentPrice;
         uint256 cashbackAmount_ = _getCashback(currentPrice_, product.cashbackPercent);
 
-        IPayment(payment).pay(
-            alias_,
-            paymentToken_,
-            msg.sender,
-            currentPrice_,
-            cashbackAmount_,
-            discountAliases_,
-            discounts_
-        );
+        if (msg.value > 0) {
+            IPayment(payment).payNative{value: msg.value}(
+                alias_,
+                paymentToken_,
+                msg.sender,
+                currentPrice_,
+                cashbackAmount_,
+                discountAliases_,
+                discounts_
+            );
+        } else {
+            IPayment(payment).pay(
+                alias_,
+                paymentToken_,
+                msg.sender,
+                currentPrice_,
+                cashbackAmount_,
+                discountAliases_,
+                discounts_
+            );
+        }
 
         address proxy_ = _create2(
             _getBytecode(initializeData_, product.implementation),

@@ -4,9 +4,7 @@ pragma solidity ^0.8.9;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 
-import "../interfaces/mock/IWETH9.sol";
-
-import "hardhat/console.sol";
+import "../interfaces/utils/IWETH9.sol";
 
 contract SwapMock {
     using SafeERC20 for IERC20;

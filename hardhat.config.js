@@ -12,11 +12,11 @@ module.exports = {
     hardhat: {
       initialDate: '1970-01-01T00:00:00Z',
     },
-    hardhat: {
-      forking: {
-        url: `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
-      },
-    },
+    // hardhat: {
+    //   forking: {
+    //     url: `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
+    //   },
+    // },
     goerli: {
       url: `https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`,
       accounts: [process.env.PRIVATE_KEY],
@@ -49,6 +49,9 @@ module.exports = {
       },
       '@uniswap/v3-core/contracts/libraries/TickMath.sol': {
         version: '0.7.6',
+      },
+      'contracts/mock/WETH9Mock.sol': {
+        version: '0.4.18',
       },
     },
   },

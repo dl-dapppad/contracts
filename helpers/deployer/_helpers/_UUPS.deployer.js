@@ -53,12 +53,12 @@ class UUPSDeployer {
 
   // Return proxy factory
   async getProxyFactory() {
-    return await ethers.getContractFactory('Proxy');
+    return ethers.getContractFactory('BaseProxy');
   }
 
   // Return contract factory
   async getImplementationFactory() {
-    return await ethers.getContractFactory(this.getFactoryName());
+    return ethers.getContractFactory(this.getFactoryName());
   }
 
   async setDeployedAddresses() {

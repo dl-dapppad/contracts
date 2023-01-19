@@ -32,8 +32,8 @@ interface IProductFactoryConfig {
      * @notice Add product config
      * @param alias_ Product alias
      * @param implementation_ Implementation contract address
-     * @param currentPrice_ Current product price
-     * @param minPrice_ Minimal product price
+     * @param currentPrice_ Current product price, base decimals
+     * @param minPrice_ Minimal product price, base decimals
      * @param decreasePercent_ Product price will be decrease at this percent after sale
      * @param cashbackPercent_ Cashback percent for distributor contract
      * @param isActive_ Availability to buy product
@@ -49,21 +49,16 @@ interface IProductFactoryConfig {
     ) external;
 
     /**
-     * @notice Add new product
-     * @param alias_ Product alias
-     */
-    function addProduct(bytes32 alias_) external;
-
-    /**
-     * @notice Return available products
-     */
-    function getProducts() external view returns (bytes32[] memory);
-
-    /**
      * @notice Set Payment contract address
      * @param payment_ Payment contract address
      */
     function setPayment(address payment_) external;
+
+    /**
+     * @notice Add new product
+     * @param alias_ Product alias
+     */
+    function addProduct(bytes32 alias_) external;
 
     /**
      * @notice Set `implementation_` for `alias_`
@@ -102,6 +97,11 @@ interface IProductFactoryConfig {
      * @param isActive_ Availability to buy product
      */
     function setStatus(bytes32 alias_, bool isActive_) external;
+
+    /**
+     * @notice Return available products
+     */
+    function getProducts() external view returns (bytes32[] memory);
 
     /**
      * @notice Return product price after one sale

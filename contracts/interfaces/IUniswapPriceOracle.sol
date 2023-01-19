@@ -18,7 +18,6 @@ interface IUniswapPriceOracle {
      * @param amountOut_ Expected token amount
      * @param poolFee_ Pool fee
      * @param secondsAgo_ Number of seconds in the past from which to calculate the price
-     *
      */
     function getSwapAmount(
         address tokenA_,

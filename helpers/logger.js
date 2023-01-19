@@ -7,7 +7,11 @@ const logAll = async (title, params) => {
 
   if (params) {
     for (const [key, value] of Object.entries(params)) {
-      logParams(key, value);
+      if (typeof value === 'object') {
+        console.log(value);
+      } else {
+        logParams(key, value);
+      }
     }
   }
 
