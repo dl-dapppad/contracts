@@ -73,11 +73,7 @@ interface IProductFactoryConfig {
      * @param currentPrice_ Current product price
      * @param minPrice_ Minimal product price
      */
-    function setPrices(
-        bytes32 alias_,
-        uint256 currentPrice_,
-        uint256 minPrice_
-    ) external;
+    function setPrices(bytes32 alias_, uint256 currentPrice_, uint256 minPrice_) external;
 
     /**
      * @notice Set `decreasePercent_` and `cashbackPercent_` for `alias_`

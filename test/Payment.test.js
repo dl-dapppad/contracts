@@ -43,7 +43,7 @@ describe('Payment', async () => {
 
   describe('supportsInterface()', async () => {
     it('should support IPayment interface', async () => {
-      expect(await payment.proxy.supportsInterface('0xc514d018')).to.be.equal(true);
+      expect(await payment.proxy.supportsInterface('0xa2d5d611')).to.be.equal(true);
     });
     it('should support IERC165Upgradeable interface', async () => {
       expect(await payment.proxy.supportsInterface('0x01ffc9a7')).to.be.equal(true);

@@ -8,11 +8,7 @@ contract UniswapV3FactoryMock {
         pool = pool_;
     }
 
-    function getPool(
-        address tokenA,
-        address tokenB,
-        uint24 fee
-    ) external view returns (address) {
+    function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address) {
         // Some calculation to prevent warnings
         return
             address(

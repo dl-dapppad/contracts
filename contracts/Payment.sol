@@ -281,6 +281,6 @@ contract Payment is ERC165Upgradeable, UUPSAccessControl, IPayment {
             ICashback(cashback).mintPoints(product_, cashbackInBaseDecimals_, payer_);
         }
 
-        emit Payed(payer_, paymentToken_, priceInPaymentToken_, cashbackInBaseDecimals_);
+        emit Payed(payer_, paymentToken_, product_, priceInPaymentToken_, cashbackInBaseDecimals_);
     }
 }

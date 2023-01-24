@@ -13,7 +13,9 @@ contract UniswapV3PoolMock {
         secondsPerLiquidityCumulativeX128sMock = secondsPerLiquidityCumulativeX128s;
     }
 
-    function observe(uint32[] calldata secondsAgos)
+    function observe(
+        uint32[] calldata secondsAgos
+    )
         external
         view
         returns (

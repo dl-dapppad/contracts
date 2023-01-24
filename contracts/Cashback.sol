@@ -107,11 +107,10 @@ contract Cashback is ERC165Upgradeable, UUPSAccessControl, ICashback {
         return cashbackAmount_;
     }
 
-    function getAccountCashbacks(bytes32[] calldata products_, address account_)
-        external
-        view
-        returns (uint256[] memory)
-    {
+    function getAccountCashbacks(
+        bytes32[] calldata products_,
+        address account_
+    ) external view returns (uint256[] memory) {
         uint256[] memory amounts_ = new uint256[](products_.length);
         for (uint256 i = 0; i < products_.length; i++) {
             amounts_[i] = _getAccountCashback(
@@ -123,11 +122,10 @@ contract Cashback is ERC165Upgradeable, UUPSAccessControl, ICashback {
         return amounts_;
     }
 
-    function getAccountCashback(bytes32 product_, address account_)
-        external
-        view
-        returns (uint256)
-    {
+    function getAccountCashback(
+        bytes32 product_,
+        address account_
+    ) external view returns (uint256) {
         return
             _getAccountCashback(
                 accountsCahsback[product_][account_],

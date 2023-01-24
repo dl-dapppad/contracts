@@ -36,8 +36,8 @@ interface IProductFactory {
      * @param alias_ Product alias
      * @param initializeData_ Constructor bytes
      */
-    function getPotentialContractAddress(bytes32 alias_, bytes memory initializeData_)
-        external
-        view
-        returns (address);
+    function getPotentialContractAddress(
+        bytes32 alias_,
+        bytes memory initializeData_
+    ) external view returns (address);
 }

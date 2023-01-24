@@ -34,7 +34,7 @@ describe('Cashback', async () => {
 
   describe('supportsInterface()', async () => {
     it('should support ICashback interface', async () => {
-      expect(await cashback.proxy.supportsInterface('0xff60edaf')).to.be.equal(true);
+      expect(await cashback.proxy.supportsInterface('0xe237f76e')).to.be.equal(true);
     });
     it('should support IERC165Upgradeable interface', async () => {
       expect(await cashback.proxy.supportsInterface('0x01ffc9a7')).to.be.equal(true);

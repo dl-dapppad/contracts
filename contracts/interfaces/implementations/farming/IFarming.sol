@@ -85,11 +85,7 @@ interface IFarming {
      * @param to_ Recivier address
      * @param amount_ Token amount
      */
-    function withdrawStuckERC20(
-        address token_,
-        address to_,
-        uint256 amount_
-    ) external;
+    function withdrawStuckERC20(address token_, address to_, uint256 amount_) external;
 
     /**
      * @notice Return reward token address

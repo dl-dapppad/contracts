@@ -52,10 +52,10 @@ abstract contract ProductFactoryConfig is UUPSAccessControl, IProductFactoryConf
         emit ProductAdded(alias_);
     }
 
-    function setImplementation(bytes32 alias_, address implementation_)
-        public
-        hasRole(PRODUCT_FACTORY_ROLE)
-    {
+    function setImplementation(
+        bytes32 alias_,
+        address implementation_
+    ) public hasRole(PRODUCT_FACTORY_ROLE) {
         require(aliases.contains(alias_), "PFC: not found");
 
         products[alias_].implementation = implementation_;
@@ -130,19 +130,17 @@ abstract contract ProductFactoryConfig is UUPSAccessControl, IProductFactoryConf
         return minPrice_.max(currentPrice_ - (currentPrice_ * decreasePercent_) / PERCENTAGE_100);
     }
 
-    function _getCashback(uint256 currentPrice_, uint128 cashbackPercent_)
-        internal
-        pure
-        returns (uint256)
-    {
+    function _getCashback(
+        uint256 currentPrice_,
+        uint128 cashbackPercent_
+    ) internal pure returns (uint256) {
         return (currentPrice_ * cashbackPercent_) / PERCENTAGE_100;
     }
 
-    function _getPotentialContractAddress(bytes memory bytecode_, uint256 salt_)
-        internal
-        view
-        returns (address)
-    {
+    function _getPotentialContractAddress(
+        bytes memory bytecode_,
+        uint256 salt_
+    ) internal view returns (address) {
         bytes32 hash_ = keccak256(
             abi.encodePacked(bytes1(0xff), address(this), salt_, keccak256(bytecode_))
         );
@@ -150,10 +148,10 @@ abstract contract ProductFactoryConfig is UUPSAccessControl, IProductFactoryConf
         return address(uint160(uint256(hash_)));
     }
 
-    function _create2(bytes memory bytecode_, uint256 salt_)
-        internal
-        returns (address contractAddress)
-    {
+    function _create2(
+        bytes memory bytecode_,
+        uint256 salt_
+    ) internal returns (address contractAddress) {
         assembly {
             contractAddress := create2(0, add(bytecode_, 0x20), mload(bytecode_), salt_)
         }
