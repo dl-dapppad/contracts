@@ -164,11 +164,7 @@ contract Farming is ERC165Upgradeable, OwnableUpgradeable, UUPSUpgradeable, IFar
         return _totalRewardAmount.from18(IERC20Metadata(rewardToken).decimals());
     }
 
-    function withdrawStuckERC20(
-        address token_,
-        address to_,
-        uint256 amount_
-    ) external onlyOwner {
+    function withdrawStuckERC20(address token_, address to_, uint256 amount_) external onlyOwner {
         uint256 available_;
         if (token_ == investmentToken) {
             available_ = IERC20(investmentToken).balanceOf(address(this)) - _totalInvestedAmount;

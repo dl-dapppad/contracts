@@ -69,11 +69,10 @@ contract ProductFactory is ProductFactoryConfig, IProductFactory {
         return proxy_;
     }
 
-    function getPotentialContractAddress(bytes32 alias_, bytes memory initializeData_)
-        external
-        view
-        returns (address)
-    {
+    function getPotentialContractAddress(
+        bytes32 alias_,
+        bytes memory initializeData_
+    ) external view returns (address) {
         Product storage product = _getProduct(alias_);
 
         return
@@ -91,11 +90,10 @@ contract ProductFactory is ProductFactoryConfig, IProductFactory {
         }
     }
 
-    function _getBytecode(bytes memory initializeData_, address implementation_)
-        private
-        pure
-        returns (bytes memory)
-    {
+    function _getBytecode(
+        bytes memory initializeData_,
+        address implementation_
+    ) private pure returns (bytes memory) {
         bytes memory bytecode_ = type(BaseProxy).creationCode;
 
         return abi.encodePacked(bytecode_, abi.encode(initializeData_, implementation_));

@@ -13,11 +13,7 @@ contract SwapMock {
     address public factory;
     address public weth;
 
-    constructor(
-        address swapRouter_,
-        address factory_,
-        address weth_
-    ) {
+    constructor(address swapRouter_, address factory_, address weth_) {
         swapRouter = swapRouter_;
         factory = factory_;
         weth = weth_;

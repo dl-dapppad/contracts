@@ -37,10 +37,10 @@ contract ERC20MintBurnCapp is
         _mint(account_, amount_);
     }
 
-    function _mint(address account_, uint256 amount_)
-        internal
-        override(ERC20Upgradeable, ERC20CappedUpgradeable)
-    {
+    function _mint(
+        address account_,
+        uint256 amount_
+    ) internal override(ERC20Upgradeable, ERC20CappedUpgradeable) {
         ERC20CappedUpgradeable._mint(account_, amount_);
     }
 }

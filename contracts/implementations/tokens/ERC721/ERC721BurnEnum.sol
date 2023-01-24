@@ -34,12 +34,9 @@ contract ERC721BurnEnum is
         return baseURI;
     }
 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
-        returns (bool)
-    {
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view override(ERC721Upgradeable, ERC721EnumerableUpgradeable) returns (bool) {
         return
             interfaceId == type(IERC721Upgradeable).interfaceId ||
             interfaceId == type(IERC721MetadataUpgradeable).interfaceId ||
@@ -50,8 +47,9 @@ contract ERC721BurnEnum is
     function _beforeTokenTransfer(
         address from_,
         address to_,
-        uint256 tokenId_
+        uint256 tokenId_,
+        uint256 batchSize_
     ) internal virtual override(ERC721Upgradeable, ERC721EnumerableUpgradeable) {
-        ERC721EnumerableUpgradeable._beforeTokenTransfer(from_, to_, tokenId_);
+        ERC721EnumerableUpgradeable._beforeTokenTransfer(from_, to_, tokenId_, batchSize_);
     }
 }

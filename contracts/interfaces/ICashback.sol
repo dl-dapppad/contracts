@@ -11,11 +11,7 @@ interface ICashback {
      * @param amount_ Mint amount, base decimals
      * @param recipient_ Recipient
      */
-    function mintPoints(
-        bytes32 product_,
-        uint256 amount_,
-        address recipient_
-    ) external;
+    function mintPoints(bytes32 product_, uint256 amount_, address recipient_) external;
 
     /**
      * @notice Mit cashback points
@@ -34,18 +30,18 @@ interface ICashback {
      * @param products_ Product aliases
      * @param account_ Withdraw from address
      */
-    function getAccountCashbacks(bytes32[] calldata products_, address account_)
-        external
-        view
-        returns (uint256[] memory);
+    function getAccountCashbacks(
+        bytes32[] calldata products_,
+        address account_
+    ) external view returns (uint256[] memory);
 
     /**
      * @notice Return `account_` cashback for selected `product_`
      * @param product_ Product alias
      * @param account_ Withdraw from address
      */
-    function getAccountCashback(bytes32 product_, address account_)
-        external
-        view
-        returns (uint256);
+    function getAccountCashback(
+        bytes32 product_,
+        address account_
+    ) external view returns (uint256);
 }

@@ -11,6 +11,7 @@ interface IPayment {
     event Payed(
         address indexed payer,
         address paymentToken,
+        bytes32 productAlias,
         uint256 priceInPaymentToken,
         uint256 cashbackInPaymentToken
     );
