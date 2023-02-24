@@ -5,7 +5,7 @@ class AccessControlDeployer extends UUPSDeployer {
     return 'BaseAccessControl';
   }
 
-  getProxyEnvAddress() {
+  getImplementationEnvAddress() {
     return 'ACCESS_CONTROL';
   }
 }

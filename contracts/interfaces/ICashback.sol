@@ -1,20 +1,20 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.9;
 
 interface ICashback {
-    event PointsMited(address indexed account, bytes32 productAlias, uint256 amount);
+    event PointsIssued(address indexed account, bytes32 productAlias, uint256 amount);
     event CashbackUsed(address indexed account, bytes32 productAlias, uint256 amount);
 
     /**
-     * @notice Mit cashback points
+     * @notice Issue cashback points
      * @param product_ Product alias
      * @param amount_ Mint amount, base decimals
      * @param recipient_ Recipient
      */
-    function mintPoints(bytes32 product_, uint256 amount_, address recipient_) external;
+    function issuePoints(bytes32 product_, uint256 amount_, address recipient_) external;
 
     /**
-     * @notice Mit cashback points
+     * @notice Use cashback points
      * @param products_ Product aliases
      * @param amounts_ Withdraw amounts
      * @param sender_ Withdraw from address

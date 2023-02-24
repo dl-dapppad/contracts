@@ -5,7 +5,7 @@ class UniswapPriceOracleDeployer extends UUPSDeployer {
     return 'UniswapPriceOracle';
   }
 
-  getProxyEnvAddress() {
+  getImplementationEnvAddress() {
     return 'UNISWAP_PRICE_ORACLE';
   }
 }

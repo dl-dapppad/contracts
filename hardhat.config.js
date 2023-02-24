@@ -9,16 +9,26 @@ require('solidity-coverage');
 
 module.exports = {
   networks: {
-    hardhat: {
-      initialDate: '1970-01-01T00:00:00Z',
-    },
     // hardhat: {
-    //   forking: {
-    //     url: `https://mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
-    //   },
+    //   initialDate: '1970-01-01T00:00:00Z',
     // },
+    hardhat: {
+      forking: {
+        url: `https://polygon-mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
+      },
+      accounts: [
+        {
+          privateKey: process.env.PRIVATE_KEY,
+          balance: '20000000000000000000',
+        },
+      ],
+    },
     goerli: {
       url: `https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`,
+      accounts: [process.env.PRIVATE_KEY],
+    },
+    polygon: {
+      url: `https://polygon-mainnet.infura.io/v3/${process.env.INFURA_API_KEY}`,
       accounts: [process.env.PRIVATE_KEY],
     },
   },
@@ -59,6 +69,7 @@ module.exports = {
     apiKey: {
       mainnet: `${process.env.ETHERSCAN_API_KEY}`,
       goerli: `${process.env.ETHERSCAN_API_KEY}`,
+      polygon: `${process.env.POLYGON_API_KEY}`,
     },
   },
   contractSizer: {

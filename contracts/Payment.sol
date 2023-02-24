@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165Upgradeable.sol";
@@ -278,7 +278,7 @@ contract Payment is ERC165Upgradeable, UUPSAccessControl, IPayment {
         }
 
         if (cashbackInBaseDecimals_ != 0) {
-            ICashback(cashback).mintPoints(product_, cashbackInBaseDecimals_, payer_);
+            ICashback(cashback).issuePoints(product_, cashbackInBaseDecimals_, payer_);
         }
 
         emit Payed(payer_, paymentToken_, product_, priceInPaymentToken_, cashbackInBaseDecimals_);

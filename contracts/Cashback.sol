@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -8,7 +8,6 @@ import "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165Upgradeabl
 import "@dlsl/dev-modules/utils/Globals.sol";
 
 import "./extensions/UUPSAccessControl.sol";
-
 import "./interfaces/ICashback.sol";
 
 contract Cashback is ERC165Upgradeable, UUPSAccessControl, ICashback {
@@ -36,7 +35,7 @@ contract Cashback is ERC165Upgradeable, UUPSAccessControl, ICashback {
         return interfaceId == type(ICashback).interfaceId || super.supportsInterface(interfaceId);
     }
 
-    function mintPoints(
+    function issuePoints(
         bytes32 product_,
         uint256 amount_,
         address recipient_
@@ -66,7 +65,7 @@ contract Cashback is ERC165Upgradeable, UUPSAccessControl, ICashback {
         productCahsback.totalPoints = productCahsback_.totalPoints + amount_;
         accountCahsback.points = accountCahsback_.points + amount_;
 
-        emit PointsMited(recipient_, product_, amount_);
+        emit PointsIssued(recipient_, product_, amount_);
     }
 
     function useCashback(

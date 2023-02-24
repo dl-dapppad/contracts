@@ -34,17 +34,17 @@ describe('Cashback', async () => {
 
   describe('supportsInterface()', async () => {
     it('should support ICashback interface', async () => {
-      expect(await cashback.proxy.supportsInterface('0xe237f76e')).to.be.equal(true);
+      expect(await cashback.proxy.supportsInterface('0x257308ea')).to.be.equal(true);
     });
     it('should support IERC165Upgradeable interface', async () => {
-      expect(await cashback.proxy.supportsInterface('0x01ffc9a7')).to.be.equal(true);
+      expect(await cashback.proxy.supportsInterface('0x257308ea')).to.be.equal(true);
     });
   });
 
-  describe('mintPoints()', async () => {
+  describe('issuePoints()', async () => {
     it('should correctly mint points, one product, once for ivan and oleg', async () => {
       // Mint for Ivan
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('100').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('100').toString(), ivan.address);
 
       let productCashback = await cashback.proxy.productsCahsback(productErc20);
       let ivanAccountCahsback = await cashback.proxy.accountsCahsback(productErc20, ivan.address);
@@ -56,7 +56,7 @@ describe('Cashback', async () => {
       // End
 
       // Mint for Oleg
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('50').toString(), oleg.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('50').toString(), oleg.address);
 
       productCashback = await cashback.proxy.productsCahsback(productErc20);
       ivanAccountCahsback = await cashback.proxy.accountsCahsback(productErc20, ivan.address);
@@ -74,10 +74,10 @@ describe('Cashback', async () => {
     });
     it('should correctly mint points, two product, once for ivan and oleg', async () => {
       // Mint for Ivan
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('100').toString(), ivan.address);
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('200').toString(), oleg.address);
-      await cashback.proxy.connect(payment).mintPoints(productErc721, toWei('400').toString(), ivan.address);
-      await cashback.proxy.connect(payment).mintPoints(productErc721, toWei('600').toString(), oleg.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('100').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('200').toString(), oleg.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc721, toWei('400').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc721, toWei('600').toString(), oleg.address);
 
       // Check erc20 product
       let productCashback = await cashback.proxy.productsCahsback(productErc20);
@@ -110,9 +110,9 @@ describe('Cashback', async () => {
       // End
     });
     it('should correctly mint points, one product, with remint for ivan', async () => {
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('200').toString(), ivan.address);
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('100').toString(), ivan.address);
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('300').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('200').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('100').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('300').toString(), ivan.address);
 
       const productCashback = await cashback.proxy.productsCahsback(productErc20);
       const ivanAccountCahsback = await cashback.proxy.accountsCahsback(productErc20, ivan.address);
@@ -123,10 +123,10 @@ describe('Cashback', async () => {
       expect(ivanCurrentCashback).to.be.equal(toWei('400').toString());
     });
     it('should correctly mint points, one product, with remint for ivan and oleg', async () => {
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('200').toString(), ivan.address);
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('100').toString(), oleg.address);
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('300').toString(), ivan.address);
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('1200').toString(), oleg.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('200').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('100').toString(), oleg.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('300').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('1200').toString(), oleg.address);
 
       // After mint #1. Ivan Cashback = 0. Oleg Cashback = 0.
       // After mint #2. Ivan Cashback = 100. Oleg Cashback = 0.
@@ -147,24 +147,24 @@ describe('Cashback', async () => {
       expect(olegCurrentCashback).to.be.equal(toWei('300').toString());
     });
     it('should revert if invalid amount', async () => {
-      await expect(cashback.proxy.connect(payment).mintPoints(productErc20, '0', ivan.address)).to.be.revertedWith(
+      await expect(cashback.proxy.connect(payment).issuePoints(productErc20, '0', ivan.address)).to.be.revertedWith(
         'Cashback: invalid amount'
       );
     });
     it('should revert if forbidden', async () => {
-      await expect(cashback.proxy.mintPoints(productErc20, '0', ivan.address)).to.be.revertedWith('UUPSAC: forbidden');
+      await expect(cashback.proxy.issuePoints(productErc20, '0', ivan.address)).to.be.revertedWith('UUPSAC: forbidden');
     });
   });
 
   describe('useCashback()', async () => {
     beforeEach(async () => {
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('100').toString(), ivan.address);
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('300').toString(), oleg.address);
-      await cashback.proxy.connect(payment).mintPoints(productErc20, toWei('800').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('100').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('300').toString(), oleg.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc20, toWei('800').toString(), ivan.address);
 
-      await cashback.proxy.connect(payment).mintPoints(productErc721, toWei('400').toString(), ivan.address);
-      await cashback.proxy.connect(payment).mintPoints(productErc721, toWei('600').toString(), oleg.address);
-      await cashback.proxy.connect(payment).mintPoints(productErc721, toWei('2000').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc721, toWei('400').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc721, toWei('600').toString(), oleg.address);
+      await cashback.proxy.connect(payment).issuePoints(productErc721, toWei('2000').toString(), ivan.address);
     });
     it('should have correct cashback amount', async () => {
       let ivanCurrentCashback = await cashback.proxy.getAccountCashback(productErc20, ivan.address);
@@ -241,7 +241,7 @@ describe('Cashback', async () => {
     it('should mint and use cashback', async () => {
       const product = '0xb9a5dc0048db9a7d13548781df3cd4b2334606391f75f40c14225a92f4cb3537';
 
-      await cashback.proxy.connect(payment).mintPoints(product, toWei('100').toString(), owner.address);
+      await cashback.proxy.connect(payment).issuePoints(product, toWei('100').toString(), owner.address);
       let ownerCurrentCashback = await cashback.proxy.getAccountCashback(product, owner.address);
       expect(ownerCurrentCashback).to.be.equal(toWei('0').toString());
 
@@ -249,7 +249,7 @@ describe('Cashback', async () => {
       ownerCurrentCashback = await cashback.proxy.getAccountCashback(product, owner.address);
       expect(ownerCurrentCashback).to.be.equal(toWei('0').toString());
 
-      await cashback.proxy.connect(payment).mintPoints(product, toWei('200').toString(), owner.address);
+      await cashback.proxy.connect(payment).issuePoints(product, toWei('200').toString(), owner.address);
       ownerCurrentCashback = await cashback.proxy.getAccountCashback(product, owner.address);
       expect(ownerCurrentCashback).to.be.equal(toWei('200').toString());
 
@@ -257,7 +257,7 @@ describe('Cashback', async () => {
       ownerCurrentCashback = await cashback.proxy.getAccountCashback(product, owner.address);
       expect(ownerCurrentCashback).to.be.equal(toWei('50').toString());
 
-      await cashback.proxy.connect(payment).mintPoints(product, toWei('300').toString(), ivan.address);
+      await cashback.proxy.connect(payment).issuePoints(product, toWei('300').toString(), ivan.address);
       ownerCurrentCashback = await cashback.proxy.getAccountCashback(product, owner.address);
       expect(ownerCurrentCashback).to.be.equal(toWei('350').toString());
 

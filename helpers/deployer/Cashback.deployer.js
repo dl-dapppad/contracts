@@ -10,7 +10,7 @@ class CashbackDeployer extends UUPSDeployer {
   }
 
   getProxyEnvAddress() {
-    return 'CASHBACK';
+    return 'CASHBACK_PROXY';
   }
 }
 
